@@ -1,25 +1,26 @@
 sap.ui.define([
     "sap/ui/core/UIComponent",
-    "stockappui/model/models"
-], (UIComponent, models) => {
+    "sap/ui/model/json/JSONModel"
+], (UIComponent, JSONModel) => {
     "use strict";
 
     return UIComponent.extend("stockappui.Component", {
-        metadata: {
-            manifest: "json",
-            interfaces: [
-                "sap.ui.core.IAsyncContentCreation"
-            ]
-        },
+        metadata: { manifest: "json" },
 
         init() {
-            // call the base component's init function
             UIComponent.prototype.init.apply(this, arguments);
 
-            // set the device model
-            this.setModel(models.createDeviceModel(), "device");
+            // View model to hold app state across steps
+            const vm = new JSONModel({
+                warehouse: "",
+                bin: "",
+                entry: { hu: "", packMat: "", product: "", batch: "", quantity: null, uom: "" },
+                serials: [],
+                list: [],
+                __sub: { mode: "", topHu: "" }
+            });
+            this.setModel(vm, "vm");
 
-            // enable routing
             this.getRouter().initialize();
         }
     });

@@ -1,0 +1,81 @@
+<mvc:View
+  controllerName="stockappui.controller.StockEntry"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns:core="sap.ui.core"
+  xmlns="sap.m"
+  xmlns:form="sap.ui.layout.form">
+
+  <Page id="StockEntryPage"
+        title="{i18n>entryTitle}"
+        titleAlignment="Center"
+        showNavButton="true"
+        navButtonPress="onNavBack">
+
+    <content>
+      <VBox class="sapUiSmallMargin">
+
+        <!-- Header context -->
+        <HBox justifyContent="SpaceBetween" class="sapUiSmallMarginBottom">
+          <ObjectStatus text="{i18n>warehouse}: {vm>/warehouse}" state="Information"/>
+          <ObjectStatus text="{i18n>bin}: {vm>/bin}" state="Information"/>
+        </HBox>
+
+        <!-- SimpleForm: single column with labels on the left -->
+        <form:SimpleForm id="StockEntryForm"
+                         layout="ResponsiveGridLayout"
+                         editable="true"
+                         columnsXL="1" columnsL="1" columnsM="1"
+                         labelSpanXL="2" labelSpanL="2" labelSpanM="3"
+                         adjustLabelSpan="false">
+
+          <Label text="{i18n>hu}"/>
+          <Input value="{vm>/entry/hu}" submit="onConfirm" liveChange="onLiveChange"/>
+
+          <Label text="{i18n>packMat}"/>
+          <Input value="{vm>/entry/packMat}" submit="onConfirm" liveChange="onLiveChange"/>
+
+          <Label text="{i18n>product}"/>
+          <Input value="{vm>/entry/product}" submit="onConfirm" liveChange="onLiveChange"/>
+
+          <Label text="{i18n>batch}"/>
+          <Input value="{vm>/entry/batch}" submit="onConfirm" liveChange="onLiveChange"/>
+
+          <!-- Quantity row: one label, two inputs on the same line -->
+          <Label text="{i18n>quantity}"/>
+          <HBox fitContainer="true" alignItems="Center" renderType="Bare">
+            <Input value="{vm>/entry/quantity}"
+                   type="Number"
+                   submit="onConfirm"
+                   liveChange="onLiveChange">
+              <layoutData>
+                <FlexItemData growFactor="1"/>
+              </layoutData>
+            </Input>
+
+            <Input value="{vm>/entry/uom}"
+                   placeholder="{i18n>uom}"
+                   width="8rem"
+                   class="sapUiSmallMarginBegin"
+                   submit="onConfirm"
+                   liveChange="onLiveChange"/>
+          </HBox>
+
+        </form:SimpleForm>
+      </VBox>
+    </content>
+
+    <!-- Footer buttons -->
+    <footer>
+      <Toolbar>
+        <ToolbarSpacer/>
+        <Button text="{i18n>confirmF4}" type="Emphasized" press="onConfirm"/>
+        <Button text="{i18n>btnTopHUF1}" press="onOpenTopHU"/>
+        <Button text="{i18n>btnSerNbF2}" press="onOpenSerNb"/>
+        <Button text="{i18n>btnListF6}" press="onOpenList"/>
+        <Button text="{i18n>backF7}" press="onNavBack"/>
+        <ToolbarSpacer/>
+      </Toolbar>
+    </footer>
+
+  </Page>
+</mvc:View>

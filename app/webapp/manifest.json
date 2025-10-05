@@ -4,9 +4,7 @@
     "id": "stockappui",
     "type": "application",
     "i18n": "i18n/i18n.properties",
-    "applicationVersion": {
-      "version": "0.0.1"
-    },
+    "applicationVersion": { "version": "0.0.1" },
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
     "resources": "resources.json",
@@ -36,14 +34,10 @@
       "tablet": "",
       "tablet@2": ""
     },
-    "deviceTypes": {
-      "desktop": true,
-      "tablet": true,
-      "phone": true
-    }
+    "deviceTypes": { "desktop": true, "tablet": true, "phone": true }
   },
   "sap.ui5": {
-    "flexEnabled": true,
+    "flexEnabled": false,
     "dependencies": {
       "minUI5Version": "1.141.0",
       "libs": {
@@ -51,16 +45,11 @@
         "sap.ui.core": {}
       }
     },
-    "contentDensities": {
-      "compact": true,
-      "cozy": true
-    },
+    "contentDensities": { "compact": true, "cozy": true },
     "models": {
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
-        "settings": {
-          "bundleName": "stockappui.i18n.i18n"
-        }
+        "settings": { "bundleName": "stockappui.i18n.i18n" }
       },
       "": {
         "dataSource": "mainService",
@@ -73,37 +62,56 @@
       }
     },
     "resources": {
-      "css": [
-        {
-          "uri": "css/style.css"
-        }
-      ]
+      "css": [{ "uri": "css/style.css" }]
+    },
+    "resourceRoots": {
+      "stockappui": "./"
     },
     "routing": {
       "config": {
         "routerClass": "sap.m.routing.Router",
+        "viewType": "XML",
+        "async": true,
+        "viewPath": "stockappui.view",
         "controlAggregation": "pages",
         "controlId": "app",
         "transition": "slide",
-        "type": "View",
-        "viewType": "XML",
-        "path": "stockappui.view",
-        "async": true,
-        "viewPath": "stockappui.view"
+        "clearControlAggregation": false
       },
       "routes": [
-        {
-          "name": "RouteMain",
-          "pattern": ":?query:",
-          "target": [
-            "TargetMain"
-          ]
-        }
+        { "name": "RouteWarehouse",  "pattern": "",                            "target": ["TargetWarehouse"] },
+        { "name": "RouteStorageBin", "pattern": "bin/{warehouse}",             "target": ["TargetStorageBin"] },
+        { "name": "RouteStockEntry", "pattern": "entry/{warehouse}/{bin}",     "target": ["TargetStockEntry"] },
+        { "name": "RouteSubAction",  "pattern": "action/{mode}/{warehouse}/{bin}", "target": ["TargetSubAction"] }
       ],
       "targets": {
-        "TargetMain": {
-          "id": "Main",
-          "name": "Main"
+        "TargetWarehouse": {
+          "viewType": "XML",
+          "transition": "slide",
+          "clearControlAggregation": false,
+          "viewId": "Warehouse",
+          "viewName": "Warehouse"
+        },
+        "TargetStorageBin": {
+          "viewType": "XML",
+          "transition": "slide",
+          "clearControlAggregation": false,
+          "viewId": "StorageBin",
+          "viewName": "StorageBin"
+        },
+        "TargetStockEntry": {
+          "viewType": "XML",
+          "transition": "slide",
+          "clearControlAggregation": false,
+          "viewId": "StockEntry",
+          "viewName": "StockEntry"
+        },
+        "TargetSubAction": {
+          "viewType": "XML",
+          "transition": "slide",
+          "clearControlAggregation": false,
+          "viewId": "SubAction",
+          "viewName": "SubAction"
         }
       }
     },

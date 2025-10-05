@@ -1,0 +1,54 @@
+<mvc:View controllerName="stockappui.controller.SubAction"
+          xmlns:mvc="sap.ui.core.mvc"
+          xmlns:core="sap.ui.core"
+          xmlns="sap.m">
+  <Page id="SubActionPage" showNavButton="true" navButtonPress="onNavBack"
+        title="{i18n>subActionTitle}">
+    <headerContent>
+      <core:Icon src="sap-icon://multi-select" color="#ff8b00"/>
+    </headerContent>
+    <content>
+
+      <!-- Top HU mode -->
+      <VBox class="sapUiSmallMargin" visible="{= ${vm>/__sub/mode} === 'TopHU' }">
+        <Label text="{i18n>scanTopHU}"/>
+        <Input id="inpTopHU" value="{vm>/__sub/topHu}" submit="onSaveTopHU"/>
+        <Toolbar class="sapUiTinyMarginTop">
+          <ToolbarSpacer/>
+          <Button text="{i18n>confirmF4}" type="Emphasized" press="onSaveTopHU"/>
+        </Toolbar>
+        <Text class="sapUiSmallMarginTop" text="{i18n>topHuNote}"/>
+      </VBox>
+
+      <!-- Serials mode -->
+      <VBox class="sapUiSmallMargin" visible="{= ${vm>/__sub/mode} === 'SerNb' }">
+        <Label text="{i18n>scanSerials}"/>
+        <Input id="inpSer" placeholder="{i18n>serialPlaceholder}" submit="onAddSerial"/>
+        <List id="lstSer" items="{ path: 'vm>/serials' }">
+          <StandardListItem title="{vm>}" type="Inactive"/>
+        </List>
+        <Toolbar class="sapUiTinyMarginTop">
+          <ToolbarSpacer/>
+          <Button text="{i18n>back}" press="onBackToEntry"/>
+        </Toolbar>
+      </VBox>
+
+      <!-- List mode -->
+      <VBox class="sapUiSmallMargin" visible="{= ${vm>/__sub/mode} === 'List' }">
+        <Text text="{i18n>confirmedListHint}"/>
+        <List id="lstConfirmed" items="{ vm>/list }">
+          <ObjectListItem
+            title="{= ${vm>product} || ${vm>hu} }"
+            number="{vm>quantity}" numberUnit="{vm>uom}">
+            <attributes>
+              <ObjectAttribute title="HU" text="{vm>hu}"/>
+              <ObjectAttribute title="Batch" text="{vm>batch}"/>
+              <ObjectAttribute title="PackMat" text="{vm>packMat}"/>
+            </attributes>
+          </ObjectListItem>
+        </List>
+      </VBox>
+
+    </content>
+  </Page>
+</mvc:View>

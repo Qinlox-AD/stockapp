@@ -1,0 +1,26 @@
+<mvc:View controllerName="stockappui.controller.Warehouse"
+          xmlns:mvc="sap.ui.core.mvc"
+          xmlns:core="sap.ui.core"
+          xmlns="sap.m"
+          displayBlock="true">
+  <Page id="WarehousePage" title="{i18n>warehouseTitle}" titleAlignment="Center">
+    <content>
+      <VBox justifyContent="Center" alignItems="Center" fitContainer="true">
+        <VBox class="sapUiSmallMargin">
+          <Label text="{i18n>warehouseLabel}"/>
+          <Input id="inpWarehouse"
+                 value="{vm>/warehouse}"
+                 placeholder="{i18n>warehousePlaceholder}"
+                 submit="onContinue"
+                 liveChange="onLiveChangeWarehouse"/>
+        </VBox>
+      </VBox>
+    </content>
+    <footer>
+      <Toolbar>
+        <ToolbarSpacer/>
+        <Button text="{i18n>continue}" type="Emphasized" press="onContinue"/>
+      </Toolbar>
+    </footer>
+  </Page>
+</mvc:View>
