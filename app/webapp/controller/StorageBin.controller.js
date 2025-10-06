@@ -1,16 +1,36 @@
 sap.ui.define([
-  "sap/ui/core/mvc/Controller",
-  "sap/ui/core/routing/History"
-], (Controller, History) => {
+  "./BaseController",
+  "sap/ui/core/routing/History",
+  "sap/m/MessageBox"
+], function (BaseController, History, MessageBox) {
   "use strict";
 
-  return Controller.extend("stockappui.controller.StorageBin", {
+  return BaseController.extend("stockappui.controller.StorageBin", {
+    onInit() {
+      this.getView().addEventDelegate({
+        onAfterShow: () => this.addFunctionKeyListener(),
+        onAfterHide: () => this.removeFunctionKeyListener()
+      });
+    },
+
+    pressKeyOnKeyboard(key) {
+      switch (key) {
+        case "Enter":
+          this.onStorageBinEnter();
+          break;
+        case "F7":
+        case "Escape":
+          this.onNavBack();
+          break;
+      }
+    },
+
     onNavBack() {
       const hist = History.getInstance();
       if (hist.getPreviousHash() !== undefined) {
         window.history.go(-1);
       } else {
-        this.getOwnerComponent().getRouter().navTo("RouteWarehouse", {}, true);
+        this.getRouter().navTo("RouteWarehouse", {}, true);
       }
     },
 
@@ -18,12 +38,18 @@ sap.ui.define([
       const vm = this.getOwnerComponent().getModel("vm");
       const wh = vm.getProperty("/warehouse") || "";
       const bin = (vm.getProperty("/bin") || "").trim();
-      this.getOwnerComponent().getRouter().navTo("RouteStockEntry", {
+
+      if (!bin) {
+        MessageBox.error(this.getI18nText("binPlaceholder"));
+        return;
+      }
+
+      this.getRouter().navTo("RouteStockEntry", {
         warehouse: encodeURIComponent(wh),
         bin: encodeURIComponent(bin)
       });
     },
 
-    onLiveChangeBin() {}
+    onLiveChangeBin() { }
   });
 });

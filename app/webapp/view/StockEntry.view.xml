@@ -61,6 +61,16 @@
           </HBox>
 
         </form:SimpleForm>
+
+        <!-- Saved Top HU (shown after confirming in SubAction) -->
+        <HBox class="sapUiSmallMarginTop"
+              alignItems="Center"
+              renderType="Bare"
+              visible="{= !!${vm>/__sub/topHu} }">
+          <Label text="{i18n>topHuLabel}" class="sapUiSmallMarginEnd"/>
+          <Text text="{vm>/__sub/topHu}"/>
+        </HBox>
+
       </VBox>
     </content>
 
