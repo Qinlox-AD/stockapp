@@ -17,14 +17,31 @@
   },
   "scripts": {
     "start": "cds-serve",
-    "watch": "cds watch --open /index.html?sap-ui-xx-viewCache=false",
-    "watch:noopen": "cds watch",
-    "ui": "ui5 serve --open /index.html",
-    "db:deploy": "cds deploy --profile deploy --to sqlite:db/dev.db",
+    "watch": "cds watch --open stockappui/index.html?sap-ui-xx-viewCache=false",
+    "watch:noopen": "cds watch --in-memory false",
+    "db:deploy": "cds deploy --to sqlite:db/dev.db",
     "db:reset": "rimraf db/dev.db && npm run db:deploy",
     "undeploy": "cf undeploy stockapp_backend --delete-services --delete-service-keys --delete-service-brokers",
     "build": "rimraf resources mta_archives && mbt build --mtar archive",
-    "deploy": "cf deploy mta_archives/archive.mtar --retries 1"
+    "deploy": "cf deploy mta_archives/archive.mtar"
   },
-  "private": true
+  "private": true,
+  "cds": {
+    "requires": {
+      "destinations": true,
+      "html5-repo": true,
+      "[production]": {
+        "auth": "xsuaa"
+      },
+      "[development]": {
+        "db": {
+          "kind": "sqlite",
+          "credentials": {
+            "url": "db/dev.db"
+          }
+        },
+        "auth": "dummy"
+      }
+    }
+  }
 }
