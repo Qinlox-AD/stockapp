@@ -11,7 +11,7 @@
           <Input id="inpWarehouse"
                  value="{vm>/warehouse}"
                  placeholder="{i18n>warehousePlaceholder}"
-                 submit="onContinue"
+                 submit="onWarehouseEnter"
                  liveChange="onLiveChangeWarehouse"/>
         </VBox>
       </VBox>
@@ -19,7 +19,7 @@
     <footer>
       <Toolbar>
         <ToolbarSpacer/>
-        <Button text="{i18n>continue}" type="Emphasized" press="onContinue"/>
+        <Button text="{i18n>enter}" type="Emphasized" press="onWarehouseEnter"/>
       </Toolbar>
     </footer>
   </Page>

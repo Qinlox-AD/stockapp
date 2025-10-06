@@ -18,6 +18,7 @@
   "scripts": {
     "start": "cds-serve",
     "watch": "cds watch --open /index.html?sap-ui-xx-viewCache=false",
+    "ui": "ui5 serve --open /index.html",
     "watch:noopen": "cds watch",
     "undeploy": "cf undeploy stockapp_backend --delete-services --delete-service-keys --delete-service-brokers",
     "build": "rimraf resources mta_archives && mbt build --mtar archive",

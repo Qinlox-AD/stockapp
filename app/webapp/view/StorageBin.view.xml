@@ -14,7 +14,7 @@
           <Input id="inpBin"
                  value="{vm>/bin}"
                  placeholder="{i18n>binPlaceholder}"
-                 submit="onStart"
+                 submit="onStorageBinEnter"
                  liveChange="onLiveChangeBin"/>
         </VBox>
       </VBox>
@@ -23,7 +23,7 @@
     <footer>
       <Toolbar>
         <ToolbarSpacer/>
-        <Button text="{i18n>enter}" type="Emphasized" press="onStart"/>
+        <Button text="{i18n>enter}" type="Emphasized" press="onStorageBinEnter"/>
         <Button text="{i18n>backF7}" press="onNavBack"/>
       </Toolbar>
     </footer>

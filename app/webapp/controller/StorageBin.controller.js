@@ -14,7 +14,7 @@ sap.ui.define([
       }
     },
 
-    onStart() {
+    onStorageBinEnter() {
       const vm = this.getOwnerComponent().getModel("vm");
       const wh = vm.getProperty("/warehouse") || "";
       const bin = (vm.getProperty("/bin") || "").trim();
