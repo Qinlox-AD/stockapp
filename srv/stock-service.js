@@ -1,6 +1,6 @@
 const cds = require('@sap/cds');
 
-module.exports = cds.service.impl(async function() {
+module.exports = cds.service.impl(async function () {
   const { PhysicalStock, SerialNumbers, TopHURegistry } = this.entities;
 
   // --- Validations
@@ -66,7 +66,7 @@ module.exports = cds.service.impl(async function() {
     const { warehouse, storageBin } = req.data;
     const rows = await SELECT.from(PhysicalStock)
       .where({ warehouse, storageBin, isTopHURecord: false })
-      .orderBy('topHU','stockHU','product');
+      .orderBy('topHU', 'stockHU', 'product');
     // TODO: build and return CSV/XLSX
     return JSON.stringify(rows);
   });

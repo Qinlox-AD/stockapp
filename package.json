@@ -18,20 +18,13 @@
   "scripts": {
     "start": "cds-serve",
     "watch": "cds watch --open /index.html?sap-ui-xx-viewCache=false",
-    "ui": "ui5 serve --open /index.html",
     "watch:noopen": "cds watch",
+    "ui": "ui5 serve --open /index.html",
+    "db:deploy": "cds deploy --profile deploy --to sqlite:db/dev.db",
+    "db:reset": "rimraf db/dev.db && npm run db:deploy",
     "undeploy": "cf undeploy stockapp_backend --delete-services --delete-service-keys --delete-service-brokers",
     "build": "rimraf resources mta_archives && mbt build --mtar archive",
     "deploy": "cf deploy mta_archives/archive.mtar --retries 1"
   },
-  "private": true,
-  "cds": {
-    "requires": {
-      "[production]": {
-        "auth": "xsuaa"
-      },
-      "destinations": true,
-      "html5-repo": true
-    }
-  }
+  "private": true
 }

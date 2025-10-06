@@ -5,7 +5,7 @@ sap.ui.define(
     function (BaseController) {
 
 
-        const FN_KEYS = new Set(["Enter", "F1", "F2", "F6", "F7", "Escape"]);
+        const FN_KEYS = new Set(["Enter", "F1", "F2","F4", "F6", "F7", "Escape"]);
         return BaseController.extend("stockappui.controller.BaseController", {
 
             getModelMain: function () {
