@@ -3,8 +3,15 @@
   "sap.app": {
     "id": "stockappui",
     "type": "application",
-    "i18n": "i18n/i18n.properties",
-    "applicationVersion": { "version": "0.0.1" },
+    "i18n": {
+      "bundleUrl": "i18n/i18n.properties",
+      "supportedLocales": [
+        ""
+      ]
+    },
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
     "title": "{{appTitle}}",
     "description": "{{appDescription}}",
     "resources": "resources.json",
@@ -34,7 +41,11 @@
       "tablet": "",
       "tablet@2": ""
     },
-    "deviceTypes": { "desktop": true, "tablet": true, "phone": true }
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    }
   },
   "sap.ui5": {
     "flexEnabled": false,
@@ -45,11 +56,19 @@
         "sap.ui.core": {}
       }
     },
-    "contentDensities": { "compact": true, "cozy": true },
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
     "models": {
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
-        "settings": { "bundleName": "stockappui.i18n.i18n" }
+        "settings": {
+          "bundleName": "stockappui.i18n.i18n",
+          "supportedLocales": [
+            ""
+          ]
+        }
       },
       "": {
         "dataSource": "mainService",
@@ -62,7 +81,11 @@
       }
     },
     "resources": {
-      "css": [{ "uri": "css/style.css" }]
+      "css": [
+        {
+          "uri": "css/style.css"
+        }
+      ]
     },
     "resourceRoots": {
       "stockappui": "./"
@@ -79,10 +102,34 @@
         "clearControlAggregation": false
       },
       "routes": [
-        { "name": "RouteWarehouse",  "pattern": "",                            "target": ["TargetWarehouse"] },
-        { "name": "RouteStorageBin", "pattern": "bin/{warehouse}",             "target": ["TargetStorageBin"] },
-        { "name": "RouteStockEntry", "pattern": "entry/{warehouse}/{bin}",     "target": ["TargetStockEntry"] },
-        { "name": "RouteSubAction",  "pattern": "action/{mode}/{warehouse}/{bin}", "target": ["TargetSubAction"] }
+        {
+          "name": "RouteWarehouse",
+          "pattern": "",
+          "target": [
+            "TargetWarehouse"
+          ]
+        },
+        {
+          "name": "RouteStorageBin",
+          "pattern": "bin/{warehouse}",
+          "target": [
+            "TargetStorageBin"
+          ]
+        },
+        {
+          "name": "RouteStockEntry",
+          "pattern": "entry/{warehouse}/{bin}",
+          "target": [
+            "TargetStockEntry"
+          ]
+        },
+        {
+          "name": "RouteSubAction",
+          "pattern": "action/{mode}/{warehouse}/{bin}",
+          "target": [
+            "TargetSubAction"
+          ]
+        }
       ],
       "targets": {
         "TargetWarehouse": {

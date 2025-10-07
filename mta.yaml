@@ -13,16 +13,14 @@ modules:
     type: nodejs
     path: gen/srv
     requires:
-      - name: stockapp_backend-auth
       - name: stockapp_backend-db
-      - name: stockapp_backend-destination   # keep if CAP uses destinations; otherwise remove
+      - name: stockapp_backend-destination
     provides:
       - name: srv-api
         properties:
           srv-url: ${default-url}
     parameters:
       buildpack: nodejs_buildpack
-      instances: 1
     build-parameters:
       builder: npm-ci
 
@@ -40,11 +38,10 @@ modules:
     type: com.sap.application.content
     path: gen
     requires:
-      - name: stockapp_backend-auth           # optional; safe to keep
       - name: stockapp_backend-html5-repo-host
         parameters:
           content-target: true
-      - name: srv-api                         # only needed if your UI build step reads it; safe to keep
+      - name: srv-api
     build-parameters:
       build-result: app/
       requires:
@@ -53,10 +50,10 @@ modules:
             - stockappui.zip
           target-path: app/
 
-  # === UI5 module (built to zip by ui5-tooling) ===
+  # === UI5 module ===
   - name: stockappui
     type: html5
-    path: app/stockapp_ui
+    path: app/stockappui
     build-parameters:
       builder: custom
       commands:
@@ -65,38 +62,59 @@ modules:
       build-result: dist
       supported-platforms: []
 
-resources:
-  - name: stockapp_backend-auth
-    type: org.cloudfoundry.managed-service
+  # === Destination Content (important for Work Zone/MAR) ===
+  - name: stockapp_backend-destination-content
+    type: com.sap.application.content
+    requires:
+      - name: stockapp_backend-destination
+        parameters:
+          content-target: true
+      - name: stockapp_backend-html5-repo-host
+        parameters:
+          service-key:
+            name: stockapp_backend-repo-host-key
+      - name: stockapp_backend-xsuaa
+        parameters:
+          service-key:
+            name: stockapp_backend-xsuaa-key
     parameters:
-      service: xsuaa
-      service-plan: application
-      path: ./xs-security.json
-      config:
-        tenant-mode: dedicated
-        xsappname: stockapp_backend-${org}-${space}
-        oauth2-configuration:
-          # With Managed AR you can keep a wildcard. You will later access via the Managed AR URL.
-          redirect-uris:
-            - https://*.hana.ondemand.com/**
+      content:
+        instance:
+          destinations:
+            - Name: stockapp_html_repo_host
+              ServiceInstanceName: stockapp_backend-html5-repo-host
+              ServiceKeyName: stockapp_backend-repo-host-key
+              sap.cloud.service: stockapp
+            - Name: stockapp_uaa
+              Authentication: OAuth2UserTokenExchange
+              ServiceInstanceName: stockapp_backend-xsuaa
+              ServiceKeyName: stockapp_backend-xsuaa-key
+              sap.cloud.service: stockapp
+          existing_destinations_policy: update
+    build-parameters:
+      no-source: true
 
+resources:
+  # === HANA DB ===
   - name: stockapp_backend-db
     type: com.sap.xs.hdi-container
     parameters:
       service: hana
       service-plan: hdi-shared
 
+  # === Destination service ===
   - name: stockapp_backend-destination
     type: org.cloudfoundry.managed-service
+    requires:
+      - name: srv-api
     parameters:
       service: destination
       service-plan: lite
       config:
-        # Managed AR ignores instance-level destinations.
-        # Keep this only if CAP itself uses the Destination service.
-        HTML5Runtime_enabled: false
+        HTML5Runtime_enabled: true
         init_data:
           instance:
+            existing_destinations_policy: update
             destinations:
               - Name: ui5
                 Type: HTTP
@@ -108,17 +126,34 @@ resources:
                 ProxyType: Internet
                 Authentication: NoAuthentication
                 HTML5.DynamicDestination: true
-                HTML5.ForwardAuthToken: true
                 URL: ~{srv-api/srv-url}
-            existing_destinations_policy: update
-    requires:
-      - name: srv-api
 
+  # === HTML5 Apps Repo host ===
   - name: stockapp_backend-html5-repo-host
     type: org.cloudfoundry.managed-service
     parameters:
       service: html5-apps-repo
       service-plan: app-host
+
+  # === HTML5 Apps Repo runtime ===
+  - name: stockapp_backend-html5-repo-rt
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-runtime
+
+  # === XSUAA ===
+  - name: stockapp_backend-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      config:
+        xsappname: stockapp-backend
+        tenant-mode: dedicated
+        oauth2-configuration:
+          redirect-uris:
+            - "*"
 
 build-parameters:
   before-all:

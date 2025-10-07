@@ -19,7 +19,7 @@ entity PhysicalStock : cuid, managed {
 
 // --- Serial numbers linked to PhysicalStock
 entity SerialNumbers : managed {
-  key physicalStockId : UUID;        // FK to PhysicalStock
+  key physicalStockId : UUID;       
   key serialNumber    : String(40);
 
   physicalStock : Association to PhysicalStock
