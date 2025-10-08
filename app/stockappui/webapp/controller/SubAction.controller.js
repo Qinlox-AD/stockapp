@@ -7,6 +7,7 @@ sap.ui.define([
 
   return BaseController.extend("stockappui.controller.SubAction", {
     onInit() {
+      this.initBackButtonRouting("RouteSubAction");
       this.getRouter().getRoute("RouteSubAction").attachPatternMatched(this.onRouteMatched, this);
       this.getView().addEventDelegate({
         onAfterShow: () => this.addFunctionKeyListener?.(),
@@ -14,30 +15,34 @@ sap.ui.define([
       });
     },
 
-    // Only F7/Escape back; F4 confirms only in TopHU mode
-    pressKeyOnKeyboard(key) {
-      switch (key) {
-        case "F7":
-        case "Escape": this.onNavBack(); break;
-        case "F4": {
-          const vm = this.getOwnerComponent().getModel("vm");
-          if (vm.getProperty("/__sub/mode") === "TopHU") this.onSaveTopHU();
-          break;
-        }
-      }
-    },
 
     async onRouteMatched(oEvt) {
       const { mode } = oEvt.getParameter("arguments");
-      const vm = this.getOwnerComponent().getModel("vm");
+      const vm = this.getModelMain();
       vm.setProperty("/__sub/mode", mode);
       if (mode === "List") {
         await this._loadBinList(vm.getProperty("/warehouse"), vm.getProperty("/bin"));
       }
     },
 
+
+    // Only F7/Escape back; F4 confirms only in TopHU mode
+    pressKeyOnKeyboard(key) {
+      switch (key) {
+        case "F7":
+          this.onBackUp();
+          break;
+        case "Escape": this.onNavBack(); break;
+        case "F4": {
+          const vm = this.getModelMain();
+          if (vm.getProperty("/__sub/mode") === "TopHU") this.onSaveTopHU();
+          break;
+        }
+      }
+    },
+
     onNavBack() {
-      const vm = this.getOwnerComponent().getModel("vm");
+      const vm = this.getModelMain();
       this.getRouter().navTo("RouteStockEntry", {
         warehouse: encodeURIComponent(vm.getProperty("/warehouse") || ""),
         bin: encodeURIComponent(vm.getProperty("/bin") || "")
@@ -46,7 +51,7 @@ sap.ui.define([
 
     // === ConfirmTopHU backend action F4 ===
     onSaveTopHU: async function () {
-      const vm = this.getOwnerComponent().getModel("vm");
+      const vm = this.getModelMain();
       const hu = (vm.getProperty("/__sub/topHu") || "").trim();
       const packMat = (vm.getProperty("/__sub/packMat") || "").trim();
       if (!hu) { MessageBox.error(this.getI18nText("scanTopHU")); return; }
@@ -73,7 +78,7 @@ sap.ui.define([
 
 
     onAddSerial: function (oEvent) {
-      const vm = this.getOwnerComponent().getModel("vm");
+      const vm = this.getModelMain();
       const input = oEvent.getSource();
       const sn = (input.getValue() || "").trim().toUpperCase();
       input.setValue(""); // clear input early
@@ -103,10 +108,7 @@ sap.ui.define([
       ctx.setParameter("storageBin", storageBin);
       await ctx.execute();
       const data = ctx.getBoundContext().getObject(); // array
-      this.getOwnerComponent().getModel("vm").setProperty("/list", data?.value || []);
+      this.getModelMain().setProperty("/list", data?.value || []);
     },
-
-
-    onBackToEntry() { this.onNavBack(); }
   });
 });

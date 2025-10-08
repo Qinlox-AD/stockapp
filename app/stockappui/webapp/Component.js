@@ -12,8 +12,8 @@ sap.ui.define([
 
             // View model to hold app state across steps
             const vm = new JSONModel({
-                warehouse: "123",
-                bin: "123",
+                warehouse: "",
+                bin: "",
                 entry: { hu: "", packMat: "", product: "", batch: "", quantity: null, uom: "" },
                 serials: [],
                 list: [],

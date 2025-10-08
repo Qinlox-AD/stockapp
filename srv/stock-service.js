@@ -111,6 +111,8 @@ module.exports = cds.service.impl(async function () {
         storageBin: e.storageBin ?? null,
         topHU: e.topHU ?? null,
         stockHU: e.stockHU ?? null,
+        packMatTopHU:  e.packMatTopHU ?? null,
+        packMatStockHU: e.packMatStockHU ?? null,
         product: e.product ?? null,
         batch: e.batch ?? null,
         quantity: e.quantity == null ? 0 : Number(e.quantity),
@@ -304,17 +306,17 @@ module.exports = cds.service.impl(async function () {
   async function exportPhysicalStockExcel(req) {
     const tx = cds.tx(req);
     try {
-      const { warehouse, storageBin } = req.data;
+      const { warehouse } = req.data;
 
       const stockRows = await tx.run(
         SELECT.from(PhysicalStock)
-          .where({ warehouse, storageBin })
+          .where({ warehouse })
           .orderBy('topHU', 'stockHU', 'product')
       );
 
       const serialRows = await tx.run(
         SELECT.from(SerialNumbers)
-          .where({ warehouse, storageBin })
+          .where({ warehouse })
           .orderBy('physicalStockId', 'serialNumber')
       );
 
@@ -326,12 +328,13 @@ module.exports = cds.service.impl(async function () {
         { header: 'Warehouse', key: 'warehouse', width: 12 },
         { header: 'Storage Bin', key: 'storageBin', width: 15 },
         { header: 'Top HU', key: 'topHU', width: 16 },
+        { header: 'PackMat Top HU', key: 'packMatTopHU', width: 20 },
         { header: 'Stock HU', key: 'stockHU', width: 16 },
+        { header: 'PackMat Stock HU', key: 'packMatStockHU', width: 20 },
         { header: 'Product', key: 'product', width: 20 },
         { header: 'Batch', key: 'batch', width: 12 },
         { header: 'Quantity', key: 'quantity', width: 10 },
         { header: 'UoM', key: 'uom', width: 8 },
-        { header: 'Is TopHU Record', key: 'isTopHURecord', width: 15 }
       ];
       ws1.addRows(stockRows);
 

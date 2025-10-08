@@ -7,6 +7,7 @@ sap.ui.define([
 
   return BaseController.extend("stockappui.controller.StorageBin", {
     onInit() {
+      this.initBackButtonRouting("RouteStorageBin");
       this.getView().addEventDelegate({
         onAfterShow: () => this.addFunctionKeyListener(),
         onAfterHide: () => this.removeFunctionKeyListener()
@@ -19,6 +20,8 @@ sap.ui.define([
           this.onStorageBinEnter();
           break;
         case "F7":
+          this.onBackUp();
+          break;
         case "Escape":
           this.onNavBack();
           break;
@@ -35,7 +38,7 @@ sap.ui.define([
     },
 
     onStorageBinEnter() {
-      const vm = this.getOwnerComponent().getModel("vm");
+      const vm = this.getModelMain();
       const wh = vm.getProperty("/warehouse") || "";
       const bin = (vm.getProperty("/bin") || "").trim();
 

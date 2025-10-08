@@ -24,7 +24,7 @@
       <Toolbar>
         <ToolbarSpacer/>
         <Button text="{i18n>enter}" type="Emphasized" press="onStorageBinEnter"/>
-        <Button text="{i18n>backF7}" press="onNavBack"/>
+        <Button text="{i18n>backF7}" press="onBackUp"/>
       </Toolbar>
     </footer>
 

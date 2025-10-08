@@ -3,13 +3,20 @@ sap.ui.define(
         "sap/ui/core/mvc/Controller"
     ],
     function (BaseController) {
+        "use strict";
 
+        const FN_KEYS = new Set(["Enter", "F1", "F2", "F3", "F4", "F6", "F7", "Escape"]);
 
-        const FN_KEYS = new Set(["Enter", "F1", "F2", "F4", "F6", "F7", "Escape"]);
+        const ROUTE_HIERARCHY = {
+            RouteSubAction: { prev: "RouteStockEntry", params: ["warehouse", "bin"] },
+            RouteStockEntry: { prev: "RouteStorageBin", params: ["warehouse"] },
+            RouteStorageBin: { prev: "RouteWarehouse", params: [] }
+        };
+
         return BaseController.extend("stockappui.controller.BaseController", {
 
-            getModelMain: function () {
-                return this.getView().getModel();
+            getModelMain() {
+                return this.getOwnerComponent().getModel("vm");
             },
 
             getRouter() {
@@ -20,36 +27,24 @@ sap.ui.define(
                 return this.getView().getModel("i18n").getResourceBundle().getText(key);
             },
 
-            loadXmlFragment(fragmentName) {
-                if (!this[fragmentName]) {
-                    this[fragmentName] = this.loadFragment({ name: fragmentName });
-                }
-                return this[fragmentName];
-            },
-
-            async openFragment(fragmentPath) {
-                const dialog = await this.loadXmlFragment(fragmentPath);
-
-                dialog.open();
-            },
-
-            addFunctionKeyListener: function (func) {
+            addFunctionKeyListener(func) {
                 this.funcPressKey = func || this.getFuncPressKey();
                 window.addEventListener("keydown", this.funcPressKey);
             },
 
-            removeFunctionKeyListener: function () {
+            removeFunctionKeyListener() {
                 window.removeEventListener("keydown", this.funcPressKey);
             },
 
             showBusyIndicator() {
                 sap.ui.core.BusyIndicator.show(0);
             },
+
             hideBusyIndicator() {
                 sap.ui.core.BusyIndicator.hide();
             },
 
-            callAction: async function (name, params = {}) {
+            async callAction(name, params = {}) {
                 const oModel = this.getOwnerComponent().getModel();
                 const oContext = oModel.bindContext(`/${name}(...)`);
                 Object.entries(params).forEach(([k, v]) => oContext.setParameter(k, v));
@@ -68,12 +63,10 @@ sap.ui.define(
                 sap.m.MessageBox.error(msg);
             },
 
-            getFuncPressKey: function () {
+            getFuncPressKey() {
                 return (event) => {
                     const key = event.key;
                     if (!FN_KEYS.has(key)) return;
-
-                    // ignore Enter while typing in an Input/TextArea
                     const active = document.activeElement;
                     const isEditable = active && (
                         active.tagName === "INPUT" ||
@@ -81,11 +74,51 @@ sap.ui.define(
                         active.isContentEditable
                     );
                     if (isEditable && key === "Enter") return;
-
                     if (key.startsWith("F")) event.preventDefault();
                     this.pressKeyOnKeyboard(key);
                 };
             },
+
+            initBackButtonRouting(routeName) {
+                this._boundRouteName = routeName;
+                this.getRouter().getRoute(routeName).attachPatternMatched(this._onPatternMatched, this);
+            },
+
+            attachViewShowHide(onAfterShow, onAfterHide) {
+                const del = {};
+                if (onAfterShow) del.onAfterShow = () => onAfterShow.call(this);
+                if (onAfterHide) del.onAfterHide = () => onAfterHide.call(this);
+                this.getView().addEventDelegate(del);
+                this._viewDelegate = del;
+            },
+
+
+            onBackUp() {
+                const vm = this.getModelMain();
+                const router = this.getRouter();
+                const currentRoute = vm.getProperty("/currentRoute");
+                const cfg = ROUTE_HIERARCHY[currentRoute];
+                if (!cfg) {
+                    router.navTo("RouteWarehouse", {}, true);
+                    return;
+                }
+                const lastArgs = vm.getProperty("/routeArgs") || {};
+                const params = {};
+                for (const key of cfg.params) {
+                    const val = lastArgs[key] ?? vm.getProperty("/" + key) ?? "";
+                    params[key] = encodeURIComponent(val);
+                }
+                router.navTo(cfg.prev, params, true);
+            },
+
+            _onPatternMatched(oEvt) {
+                const vm = this.getModelMain();
+                vm.setProperty("/currentRoute", oEvt.getParameter("name"));
+                vm.setProperty("/routeArgs", oEvt.getParameter("arguments") || {});
+                if (typeof this.onRouteMatchedExt === "function") {
+                    return this.onRouteMatchedExt(oEvt);
+                }
+            }
         });
     }
 );
