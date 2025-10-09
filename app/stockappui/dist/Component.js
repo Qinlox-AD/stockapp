@@ -1,0 +1,2 @@
+sap.ui.define(["sap/ui/core/UIComponent","sap/ui/model/json/JSONModel"],(t,e)=>{"use strict";return t.extend("stockappui.Component",{metadata:{manifest:"json"},init(){t.prototype.init.apply(this,arguments);const i=new e({warehouse:"",bin:"",entry:{hu:"",packMat:"",product:"",batch:"",quantity:null,uom:""},serials:[],list:[],__sub:{mode:"",topHu:"",packMatTopHu:""}});this.setModel(i,"vm");this.getRouter().initialize()}})});
+//# sourceMappingURL=Component.js.map

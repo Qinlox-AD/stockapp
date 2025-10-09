@@ -1,8 +1,20 @@
 namespace inventory;
 
-using { cuid, managed } from '@sap/cds/common';
+using {
+  cuid,
+  managed
+} from '@sap/cds/common';
 
 // --- Core physical stock line
+
+@assert.unique: {stockHU_per_wh: [
+  warehouse,
+  stockHU
+]}
+@assert.unique: {topHU_per_wh: [
+  warehouse,
+  topHU
+]}
 entity PhysicalStock : cuid, managed {
   warehouse      : String(10);
   storageBin     : String(20);
@@ -12,24 +24,30 @@ entity PhysicalStock : cuid, managed {
   packMatStockHU : String(40);
   product        : String(40);
   batch          : String(20);
-  quantity       : Decimal(13,3);
+  quantity       : Decimal(13, 3);
   uom            : String(3);
-  isTopHURecord  : Boolean default false;
 }
 
-// --- Serial numbers linked to PhysicalStock
+
+@assert.unique: {sn_per_loc_prod: [
+  warehouse,
+  product,
+  serialNumber
+]}
 entity SerialNumbers : managed {
-  key physicalStockId : UUID;       
-  key serialNumber    : String(40);
+  key physicalStockId : UUID;
+  key serialNumber    : String(40); // immutable key, fine
 
-  physicalStock : Association to PhysicalStock
-    on physicalStock.ID = physicalStockId;
+      physicalStock   : Association to PhysicalStock
+                          on physicalStock.ID = physicalStockId;
 
-  warehouse    : String(10);
-  storageBin   : String(20);
-  topHU        : String(30);
-  stockHU      : String(30);
-  product      : String(40);
+      warehouse       : String(10);
+      storageBin      : String(20);
+      product         : String(40);
+
+      // HU fields can stay nullable if that’s intended
+      topHU           : String(30);
+      stockHU         : String(30);
 }
 
 // --- Top HU registry, unique by business keys

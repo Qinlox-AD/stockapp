@@ -82,13 +82,9 @@ sap.ui.define([
         MessageBox.error(this.getI18nText("errProductNeedsQty"));
         return;
       }
-      if (hasQty) {
-        const qty = Number(entry.quantity);
-
-        if (isNaN(qty) || qty <= 0) {
-          MessageBox.error(this.getI18nText("errQtyNumeric"));
-          return;
-        }
+      if (hasQty && isNaN(Number(entry.quantity))) {
+        MessageBox.error(this.getI18nText("errQtyNumeric"));
+        return;
       }
       if (!hasProduct && hasQty) {
         MessageBox.error(this.getI18nText("errQtyNoProduct"));

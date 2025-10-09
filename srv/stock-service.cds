@@ -19,7 +19,7 @@ type TopHUInput          : {
     warehouse  : String(10);
     storageBin : String(20);
     topHU      : String(30);
-    packMat    : String(40);
+    packMatTopHU    : String(40);
 };
 
 // --- Result shape returned by actions that confirm stock
@@ -32,7 +32,6 @@ type PhysicalStockResult : {
     product       : String(40);
     quantity      : Decimal(13, 3);
     uom           : String(3);
-    isTopHURecord : Boolean;
 };
 
 // --- Result for serial-related actions (no 'ok')
@@ -47,14 +46,6 @@ service StockService @(path: '/rf') {
 
     entity SerialNumbers as projection on inventory.SerialNumbers;
     entity TopHURegistry as projection on inventory.TopHURegistry;
-
-    entity BinList       as
-        projection on inventory.PhysicalStock
-        excluding {
-            isTopHURecord
-        }
-        where
-            isTopHURecord = false;
 
     action ConfirmTopHU(input: TopHUInput)                                                  returns PhysicalStockResult;
     action ConfirmStock(entry: PhysicalStockInput)                                          returns PhysicalStockResult;
