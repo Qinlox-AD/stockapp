@@ -11,10 +11,6 @@ using {
   warehouse,
   stockHU
 ]}
-@assert.unique: {topHU_per_wh: [
-  warehouse,
-  topHU
-]}
 entity PhysicalStock : cuid, managed {
   warehouse      : String(10);
   storageBin     : String(20);

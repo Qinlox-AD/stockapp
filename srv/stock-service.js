@@ -43,21 +43,17 @@ module.exports = cds.service.impl(async function () {
     const { warehouse, storageBin, topHU, packMat } = req.data.input || {};
 
     try {
-      // --- Check if TopHURegistry already has the record
-      const exists = await tx.run(
-        SELECT.one.from(TopHURegistry).where({ warehouse, storageBin, topHU })
-      );
-
-      if (exists) {
-        return req.reject(409, `Top HU ${topHU} already exists in warehouse ${warehouse}.`);
+      try {
+        await tx.run(
+          INSERT.into(TopHURegistry).entries({ warehouse, storageBin, topHU })
+        );
+      } catch (err) {
+        const handled = _buildDuplicateConstraintMessage(err, req, { warehouse, topHU });
+        if (handled) return handled;
+        throw err;
       }
 
-      await tx.run(
-        INSERT.into(TopHURegistry).entries({ warehouse, storageBin, topHU })
-      );
       const ID = cds.utils.uuid();
-
-
       await tx.run(
         INSERT.into(PhysicalStock).entries({
           ID,
@@ -80,11 +76,11 @@ module.exports = cds.service.impl(async function () {
           'uom'
         ).where({ ID })
       );
-
     } catch (err) {
       return req.reject(400, `ConfirmTopHU failed: ${err.message}`);
     }
   }
+
 
 
   async function confirmStock(req) {
@@ -313,7 +309,7 @@ module.exports = cds.service.impl(async function () {
     try {
       const { warehouse } = req.data;
 
-      const stockRows = await tx.run(
+      const stockRowsRaw = await tx.run(
         SELECT.from(PhysicalStock)
           .where({ warehouse })
           .orderBy('topHU', 'stockHU', 'product')
@@ -325,9 +321,41 @@ module.exports = cds.service.impl(async function () {
           .orderBy('physicalStockId', 'serialNumber')
       );
 
+      // Aggregate by:
+      //  - SAME STOCK HU: key = (warehouse, stockHU, product, batch, uom)
+      //  - OTHERWISE (no stockHU): key = (warehouse, storageBin, product, batch, uom)
+      const agg = new Map();
+
+      for (const r of stockRowsRaw) {
+        const hasStockHU = r.stockHU != null && r.stockHU !== '';
+        const key = hasStockHU
+          ? `SHU|${r.warehouse}|${r.stockHU}|${r.product || ''}|${r.batch || ''}|${r.uom || ''}`
+          : `BIN|${r.warehouse}|${r.storageBin}|${r.product || ''}|${r.batch || ''}|${r.uom || ''}`;
+
+        const prev = agg.get(key);
+        if (!prev) {
+          agg.set(key, {
+            warehouse: r.warehouse,
+            storageBin: r.storageBin,
+            topHU: r.topHU,
+            packMatTopHU: r.packMatTopHU,
+            stockHU: r.stockHU,
+            packMatStockHU: r.packMatStockHU,
+            product: r.product,
+            batch: r.batch,
+            quantity: Number(r.quantity) || 0,
+            uom: r.uom
+          });
+        } else {
+          prev.quantity = (Number(prev.quantity) || 0) + (Number(r.quantity) || 0);
+        }
+      }
+
+      const stockRows = Array.from(agg.values());
+
       const wb = new ExcelJS.Workbook();
 
-      // --- Sheet 1: Stock
+      // --- Sheet 1: Stock (aggregated)
       const ws1 = wb.addWorksheet('Stock');
       ws1.columns = [
         { header: 'Warehouse', key: 'warehouse', width: 12 },
@@ -343,7 +371,7 @@ module.exports = cds.service.impl(async function () {
       ];
       ws1.addRows(stockRows);
 
-      // --- Sheet 2: Serials
+      // --- Sheet 2: Serials (unchanged)
       const ws2 = wb.addWorksheet('SerialNumbers');
       ws2.columns = [
         { header: 'Serial Number', key: 'serialNumber', width: 24 },
@@ -355,73 +383,59 @@ module.exports = cds.service.impl(async function () {
       ];
       ws2.addRows(serialRows);
 
-      // Optional cosmetics
       [ws1, ws2].forEach(ws => {
         ws.views = [{ state: 'frozen', ySplit: 1 }];
         ws.getRow(1).font = { bold: true };
       });
 
-      const buf = await wb.xlsx.writeBuffer(); // ArrayBuffer
-      return Buffer.from(buf); // LargeBinary
+      const buf = await wb.xlsx.writeBuffer();
+      return Buffer.from(buf);
     } catch (err) {
       return req.reject(400, `Excel export failed: ${err.message}`);
     }
   }
 
-  // const MESSAGES = {
-  //   SN_PER_LOC_PROD: p =>
-  //     `Duplicate serial ${p._display} already exist for warehouse ${p.warehouse}.`,
-  //   STOCKHU_PER_WH: p =>
-  //     `Duplicate Stock HU ${p._display} already exist for warehouse ${p.warehouse}.`,
-  //   TOPHU_PER_WH: p =>
-  //     `Duplicate Top HU ${p._display} already exist for warehouse ${p.warehouse}.`,
-  // };
 
-  // const TABLE_TO_CONSTRAINT = {
-  //   INVENTORY_TOPHUREGISTRY: 'TOPHU_PER_WH',
-  //   INVENTORY_PHYSICALSTOCK: 'STOCKHU_PER_WH',
-  //   INVENTORY_SERIALREGISTRY: 'SN_PER_LOC_PROD',
-  // };
+  const MESSAGES = {
+    SN_PER_LOC_PROD: p =>
+      `Duplicate serial ${p.serialNumber ?? ''} already exist for warehouse ${p.warehouse}.`,
+    STOCKHU_PER_WH: p =>
+      `Duplicate Stock HU ${p.stockHU ?? ''} already exist for warehouse ${p.warehouse}.`,
+    TOPHU_PER_WH: p =>
+      `Duplicate Top HU ${p.topHU ?? ''} already exist for warehouse ${p.warehouse}.`,
+  };
 
-  // function _buildDuplicateConstraintMessage(err, req, params = {}) {
-  //   const msg = String(err?.message || '');
-  //   if (!/unique constraint (violated|violation)/i.test(msg)) return null;
+  const TABLE_TO_CONSTRAINT = {
+    INVENTORY_PHYSICALSTOCK: 'STOCKHU_PER_WH',
+    INVENTORY_SERIALREGISTRY: 'SN_PER_LOC_PROD',
+    INVENTORY_TOPHUREGISTRY: 'TOPHU_PER_WH', // ← add this
+  };
 
-  //   const indexName =
-  //     (msg.match(/Index\(([^)]+)\)/i)?.[1]) ||
-  //     (msg.match(/indexname=([^\s;]+)/i)?.[1]) ||
-  //     '';
+  function _buildDuplicateConstraintMessage(err, req, params = {}) {
+    const msg = String(err?.message || '');
+    if (!/unique constraint (violated|violation)/i.test(msg)) return null;
 
-  //   const tableNameRaw =
-  //     (msg.match(/Table\(([^)]+)\)/i)?.[1]) ||
-  //     (msg.match(/for table [^:]*:([A-Z0-9_:$]+)/i)?.[1]) ||
-  //     '';
-  //   const tableName = tableNameRaw.toUpperCase();
+    const indexName =
+      (msg.match(/Index\(([^)]+)\)/i)?.[1]) ||
+      (msg.match(/indexname=([^\s;]+)/i)?.[1]) ||
+      '';
 
-  //   let values = [];
-  //   const valueMatch = msg.match(/value='([^']+)'/i);
-  //   const keyMatch = msg.match(/key=([^\s;]+)/i);
-  //   if (valueMatch) {
-  //     const raw = valueMatch[1];
-  //     const parts = raw.includes(';') ? raw.split(';') : [raw];
-  //     values = [...new Set(parts.map(v => v.trim()).filter(Boolean))];
-  //   } else if (keyMatch) {
-  //     values = [keyMatch[1]];
-  //   }
+    const tableNameRaw =
+      (msg.match(/Table\(([^)]+)\)/i)?.[1]) ||
+      (msg.match(/for table [^:]*:([A-Z0-9_:$]+)/i)?.[1]) ||
+      '';
+    const tableName = tableNameRaw.toUpperCase();
 
-  //   const display =
-  //     values.length === 0
-  //       ? (params.topHU || params.stockHU || 'one or more values')
-  //       : values.join(', ');
+    const key =
+      Object.keys(MESSAGES).find(k => indexName.includes(k) || msg.includes(k)) ||
+      Object.entries(TABLE_TO_CONSTRAINT).find(([tbl]) => tableName.includes(tbl))?.[1] ||
+      null;
 
-  //   let key =
-  //     Object.keys(MESSAGES).find(k => indexName.includes(k) || msg.includes(k)) ||
-  //     Object.entries(TABLE_TO_CONSTRAINT).find(([tbl]) => tableName.includes(tbl))?.[1] ||
-  //     null;
+    if (!key) return null;
 
-  //   if (!key) return null;
+    return req.reject(409, MESSAGES[key](params));
+  }
 
-  //   const payload = { ...params, _display: display };
-  //   return req.reject(409, MESSAGES[key](payload));
-  // }
+
+
 });
