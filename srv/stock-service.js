@@ -40,47 +40,34 @@ module.exports = cds.service.impl(async function () {
   // ---------------------------------------------------------------------------
   async function confirmTopHU(req) {
     const tx = cds.tx(req);
-    try {
-      const { warehouse, storageBin, topHU, packMatTopHU } = req.data.input || {};
+    const { warehouse, storageBin, topHU, packMat } = req.data.input || {};
 
+    try {
+      // --- Check if TopHURegistry already has the record
       const exists = await tx.run(
         SELECT.one.from(TopHURegistry).where({ warehouse, storageBin, topHU })
       );
 
-      if (!exists) {
-        await tx.run(
-          INSERT.into(TopHURegistry).entries({ warehouse, storageBin, topHU })
-        );
-
-        const ID = cds.utils.uuid();
-        try {
-          await tx.run(INSERT.into(PhysicalStock).entries(row));
-        } catch (err) {
-          // Only handle TOPHU_PER_WH via your shared mapper
-          const handled = _buildDuplicateConstraintMessage(err, req, {
-            warehouse: e.warehouse,
-            topHU: e.topHU
-          });
-          if (handled) return handled;
-          throw err;
-        }
-
-        // Return exactly the columns promised by PhysicalStockResult
-        return tx.run(
-          SELECT.one.from(PhysicalStock).columns(
-            'ID',
-            'warehouse',
-            'storageBin',
-            'topHU',
-            'stockHU',
-            'product',
-            'quantity',
-            'uom',
-          ).where({ ID })
-        );
+      if (exists) {
+        return req.reject(409, `Top HU ${topHU} already exists in warehouse ${warehouse}.`);
       }
 
-      // Already registered -> return existing TopHU record with exact column list
+      await tx.run(
+        INSERT.into(TopHURegistry).entries({ warehouse, storageBin, topHU })
+      );
+      const ID = cds.utils.uuid();
+
+
+      await tx.run(
+        INSERT.into(PhysicalStock).entries({
+          ID,
+          warehouse,
+          storageBin,
+          topHU,
+          packMatTopHU: packMat
+        })
+      );
+
       return tx.run(
         SELECT.one.from(PhysicalStock).columns(
           'ID',
@@ -90,16 +77,19 @@ module.exports = cds.service.impl(async function () {
           'stockHU',
           'product',
           'quantity',
-          'uom',
-        ).where({ warehouse, storageBin, topHU })
+          'uom'
+        ).where({ ID })
       );
+
     } catch (err) {
       return req.reject(400, `ConfirmTopHU failed: ${err.message}`);
     }
   }
 
+
   async function confirmStock(req) {
     const tx = cds.tx(req);
+
     try {
       const e = req.data?.entry || {};
       const ID = cds.utils.uuid();
@@ -118,25 +108,38 @@ module.exports = cds.service.impl(async function () {
         uom: e.uom ?? null
       };
 
-      await tx.run(INSERT.into(PhysicalStock).entries(row));
+      try {
+        await tx.run(INSERT.into(PhysicalStock).entries(row));
+      } catch (err) {
+        const handled = _buildDuplicateConstraintMessage(err, req, {
+          warehouse: row.warehouse,
+          stockHU: row.stockHU,
+          product: row.product
+        });
+        if (handled) return handled;
+        throw err; // stop pretending — this is a real failure
+      }
 
-      // Return exactly the columns promised by PhysicalStockResult
       return tx.run(
-        SELECT.one.from(PhysicalStock).columns(
-          'ID',
-          'warehouse',
-          'storageBin',
-          'topHU',
-          'stockHU',
-          'product',
-          'quantity',
-          'uom'
-        ).where({ ID })
+        SELECT.one
+          .from(PhysicalStock)
+          .columns(
+            'ID',
+            'warehouse',
+            'storageBin',
+            'topHU',
+            'stockHU',
+            'product',
+            'quantity',
+            'uom'
+          )
+          .where({ ID })
       );
     } catch (err) {
       return req.reject(400, `ConfirmStock failed: ${err.message}`);
     }
   }
+
 
   async function scanSerial(req) {
     const tx = cds.tx(req);
@@ -235,10 +238,8 @@ module.exports = cds.service.impl(async function () {
         product = null, batch = null, uom = null
       } = entry;
 
-      if (!warehouse || !storageBin)
-        return req.reject(400, 'warehouse & storageBin required');
-      if (serials.length && !product)
-        return req.reject(400, 'Product is required when confirming serials');
+      if (!warehouse || !storageBin) return req.reject(400, 'warehouse & storageBin required');
+      if (serials.length && !product) return req.reject(400, 'Product is required when confirming serials');
 
       const hostKey = { warehouse, storageBin, topHU, stockHU, product };
 
@@ -248,23 +249,16 @@ module.exports = cds.service.impl(async function () {
         try {
           await tx.run(
             INSERT.into(PhysicalStock).entries({
-              ID, ...hostKey, batch, uom, quantity: 0
+              ID, ...hostKey, batch, uom, quantity: 0, isTopHURecord: false
             })
           );
+          host = { ID, ...hostKey };
         } catch (err) {
-          // Pass both HU fields so the mapper can tailor the message
-          const handled = _buildDuplicateConstraintMessage(err, req, {
-            warehouse,
-            topHU,
-            stockHU
-          });
+          const handled = _buildDuplicateConstraintMessage(err, req, { warehouse, topHU, stockHU, product });
           if (handled) return handled;
           throw err;
         }
-        host = { ID, ...hostKey };
       }
-
-
 
       const normalized = [...new Set(
         (serials || []).map(s => String(s).trim().toUpperCase()).filter(Boolean)
@@ -278,13 +272,14 @@ module.exports = cds.service.impl(async function () {
         }));
 
         try {
-          await tx.run(INSERT.into(SerialNumbers).entries(rows));
+          await tx.run(UPSERT.into(SerialNumbers).entries(rows));
         } catch (err) {
-          const handled = _buildDuplicateConstraintMessage(err, req, warehouse, product);
+          const handled = _buildDuplicateConstraintMessage(err, req, { warehouse, product });
           if (handled) return handled;
           throw err;
         }
       }
+
       const { count } = await tx.run(
         SELECT.one`count(*) as count`.from(SerialNumbers).where({ physicalStockId: host.ID })
       );
@@ -296,6 +291,7 @@ module.exports = cds.service.impl(async function () {
       return req.reject(400, `ConfirmStockWithSerials failed: ${err.message}`);
     }
   }
+
 
   async function exportBin(req) {
     const tx = cds.tx(req);
@@ -372,44 +368,60 @@ module.exports = cds.service.impl(async function () {
     }
   }
 
-  function _buildDuplicateConstraintMessage(err, req, params = {}) {
-    const msg = String(err?.message || '');
-    if (!/unique constraint violated/i.test(msg)) return null;
+  // const MESSAGES = {
+  //   SN_PER_LOC_PROD: p =>
+  //     `Duplicate serial ${p._display} already exist for warehouse ${p.warehouse}.`,
+  //   STOCKHU_PER_WH: p =>
+  //     `Duplicate Stock HU ${p._display} already exist for warehouse ${p.warehouse}.`,
+  //   TOPHU_PER_WH: p =>
+  //     `Duplicate Top HU ${p._display} already exist for warehouse ${p.warehouse}.`,
+  // };
 
-    // index name & values from HANA message
-    const indexMatch = msg.match(/Index\(([^)]+)\)/i);
-    const indexName = indexMatch ? indexMatch[1] : '';
+  // const TABLE_TO_CONSTRAINT = {
+  //   INVENTORY_TOPHUREGISTRY: 'TOPHU_PER_WH',
+  //   INVENTORY_PHYSICALSTOCK: 'STOCKHU_PER_WH',
+  //   INVENTORY_SERIALREGISTRY: 'SN_PER_LOC_PROD',
+  // };
 
-    const valueMatch = msg.match(/value='([^']+)'/i);
-    const values = valueMatch
-      ? [...new Set(valueMatch[1].split(/[;,]/).map(v => v.trim()).filter(Boolean))]
-      : [];
+  // function _buildDuplicateConstraintMessage(err, req, params = {}) {
+  //   const msg = String(err?.message || '');
+  //   if (!/unique constraint (violated|violation)/i.test(msg)) return null;
 
-    const display =
-      values.length === 0
-        ? (params.topHU || params.stockHU || 'one or more values')
-        : values.length <= 5
-          ? values.join(', ')
-          : `${values.slice(0, 5).join(', ')} (+${values.length - 5} more)`;
+  //   const indexName =
+  //     (msg.match(/Index\(([^)]+)\)/i)?.[1]) ||
+  //     (msg.match(/indexname=([^\s;]+)/i)?.[1]) ||
+  //     '';
 
-    // Map constraint → message
-    const MESSAGES = {
-      SN_PER_LOC_PROD: p =>
-        `Duplicate serial${values.length > 1 ? 's' : ''}: ${display} already exist${values.length > 1 ? '' : 's'} for warehouse ${p.warehouse} & product ${p.product}.`,
+  //   const tableNameRaw =
+  //     (msg.match(/Table\(([^)]+)\)/i)?.[1]) ||
+  //     (msg.match(/for table [^:]*:([A-Z0-9_:$]+)/i)?.[1]) ||
+  //     '';
+  //   const tableName = tableNameRaw.toUpperCase();
 
-      STOCKHU_PER_WH: p =>
-        `Duplicate Stock HU${values.length > 1 ? 's' : ''}: ${display} already exist${values.length > 1 ? '' : 's'} for warehouse ${p.warehouse}.`,
+  //   let values = [];
+  //   const valueMatch = msg.match(/value='([^']+)'/i);
+  //   const keyMatch = msg.match(/key=([^\s;]+)/i);
+  //   if (valueMatch) {
+  //     const raw = valueMatch[1];
+  //     const parts = raw.includes(';') ? raw.split(';') : [raw];
+  //     values = [...new Set(parts.map(v => v.trim()).filter(Boolean))];
+  //   } else if (keyMatch) {
+  //     values = [keyMatch[1]];
+  //   }
 
-      TOPHU_PER_WH: p =>
-        `Duplicate Top HU${values.length > 1 ? 's' : ''}: ${display} already exist${values.length > 1 ? '' : 's'} for warehouse ${p.warehouse}.`,
-    };
+  //   const display =
+  //     values.length === 0
+  //       ? (params.topHU || params.stockHU || 'one or more values')
+  //       : values.join(', ');
 
-    const key = Object.keys(MESSAGES).find(k => indexName.includes(k) || msg.includes(k));
-    if (!key) return null;
+  //   let key =
+  //     Object.keys(MESSAGES).find(k => indexName.includes(k) || msg.includes(k)) ||
+  //     Object.entries(TABLE_TO_CONSTRAINT).find(([tbl]) => tableName.includes(tbl))?.[1] ||
+  //     null;
 
-    return req.reject(409, MESSAGES[key](params));
-  }
+  //   if (!key) return null;
 
-
-
+  //   const payload = { ...params, _display: display };
+  //   return req.reject(409, MESSAGES[key](payload));
+  // }
 });
