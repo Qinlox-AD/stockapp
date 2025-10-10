@@ -86,56 +86,59 @@ module.exports = cds.service.impl(async function () {
   async function confirmStock(req) {
     const tx = cds.tx(req);
 
-    try {
-      const e = req.data?.entry || {};
-      const ID = cds.utils.uuid();
+    const e = req.data?.entry || {};
+    const ID = cds.utils.uuid();
 
-      const row = {
-        ID,
-        warehouse: e.warehouse ?? null,
-        storageBin: e.storageBin ?? null,
-        topHU: e.topHU ?? null,
-        stockHU: e.stockHU ?? null,
-        packMatTopHU: e.packMatTopHU ?? null,
-        packMatStockHU: e.packMatStockHU ?? null,
-        product: e.product ?? null,
-        batch: e.batch ?? null,
-        quantity: e.quantity == null ? 0 : Number(e.quantity),
-        uom: e.uom ?? null
-      };
+    const row = {
+      ID,
+      warehouse: e.warehouse ?? null,
+      storageBin: e.storageBin ?? null,
+      topHU: e.topHU ?? null,
+      stockHU: e.stockHU ?? null,
+      packMatTopHU: e.packMatTopHU ?? null,
+      packMatStockHU: e.packMatStockHU ?? null,
+      product: e.product ?? null,
+      batch: e.batch ?? null,
+      quantity: e.quantity == null ? 0 : Number(e.quantity),
+      uom: e.uom ?? null
+    };
 
-      try {
-        await tx.run(INSERT.into(PhysicalStock).entries(row));
-      } catch (err) {
-        const handled = _buildDuplicateConstraintMessage(err, req, {
+    // --- Only check for duplicates if stockHU exists ---
+    if (row.stockHU) {
+      const exists = await tx.run(
+        SELECT.one.from(PhysicalStock).where({
           warehouse: row.warehouse,
-          stockHU: row.stockHU,
-          product: row.product
-        });
-        if (handled) return handled;
-        throw err; // stop pretending — this is a real failure
-      }
-
-      return tx.run(
-        SELECT.one
-          .from(PhysicalStock)
-          .columns(
-            'ID',
-            'warehouse',
-            'storageBin',
-            'topHU',
-            'stockHU',
-            'product',
-            'quantity',
-            'uom'
-          )
-          .where({ ID })
+          stockHU: row.stockHU
+        })
       );
-    } catch (err) {
-      return req.reject(400, `ConfirmStock failed: ${err.message}`);
+      if (exists) {
+        return req.reject(
+          409,
+          `Duplicate Stock HU ${row.stockHU} already exists for warehouse ${row.warehouse}.`
+        );
+      }
     }
-  }
 
+    try {
+      await tx.run(INSERT.into(PhysicalStock).entries(row));
+    } catch (err) {
+      throw err;
+    }
+
+    return {
+      ID,
+      warehouse: row.warehouse,
+      storageBin: row.storageBin,
+      topHU: row.topHU,
+      stockHU: row.stockHU,
+      packMatTopHU: row.packMatTopHU,
+      packMatStockHU: row.packMatStockHU,
+      product: row.product,
+      batch: row.batch,
+      quantity: row.quantity,
+      uom: row.uom
+    };
+  }
 
   async function scanSerial(req) {
     const tx = cds.tx(req);
@@ -240,20 +243,27 @@ module.exports = cds.service.impl(async function () {
       const hostKey = { warehouse, storageBin, topHU, stockHU, product };
 
       let host = await tx.run(SELECT.one.from(PhysicalStock).where(hostKey).forUpdate());
+
       if (!host) {
-        const ID = cds.utils.uuid();
-        try {
-          await tx.run(
-            INSERT.into(PhysicalStock).entries({
-              ID, ...hostKey, batch, uom, quantity: 0, isTopHURecord: false
-            })
+        if (stockHU) {
+          const dup = await tx.run(
+            SELECT.one.from(PhysicalStock).where({ warehouse, stockHU })
           );
-          host = { ID, ...hostKey };
-        } catch (err) {
-          const handled = _buildDuplicateConstraintMessage(err, req, { warehouse, topHU, stockHU, product });
-          if (handled) return handled;
-          throw err;
+          if (dup) {
+            return req.reject(
+              409,
+              `Duplicate Stock HU ${stockHU} already exists for warehouse ${warehouse}.`
+            );
+          }
         }
+
+        const ID = cds.utils.uuid();
+        await tx.run(
+          INSERT.into(PhysicalStock).entries({
+            ID, ...hostKey, batch, uom, quantity: 0
+          })
+        );
+        host = { ID, ...hostKey };
       }
 
       const normalized = [...new Set(
@@ -268,9 +278,9 @@ module.exports = cds.service.impl(async function () {
         }));
 
         try {
-          await tx.run(UPSERT.into(SerialNumbers).entries(rows));
+          await tx.run(INSERT.into(SerialNumbers).entries(rows));
         } catch (err) {
-          const handled = _buildDuplicateConstraintMessage(err, req, { warehouse, product });
+          const handled = _buildDuplicateConstraintMessage(err, req, { warehouse, product, serialNumber: normalized.length === 1 ? normalized[0] : undefined });
           if (handled) return handled;
           throw err;
         }
@@ -287,6 +297,7 @@ module.exports = cds.service.impl(async function () {
       return req.reject(400, `ConfirmStockWithSerials failed: ${err.message}`);
     }
   }
+
 
 
   async function exportBin(req) {
@@ -398,17 +409,14 @@ module.exports = cds.service.impl(async function () {
 
   const MESSAGES = {
     SN_PER_LOC_PROD: p =>
-      `Duplicate serial ${p.serialNumber ?? ''} already exist for warehouse ${p.warehouse}.`,
-    STOCKHU_PER_WH: p =>
-      `Duplicate Stock HU ${p.stockHU ?? ''} already exist for warehouse ${p.warehouse}.`,
+      `Duplicate serial ${p.serialNumber ?? ''} already exists for warehouse ${p.warehouse}.`,
     TOPHU_PER_WH: p =>
-      `Duplicate Top HU ${p.topHU ?? ''} already exist for warehouse ${p.warehouse}.`,
+      `Duplicate Top HU ${p.topHU ?? ''} already exists for warehouse ${p.warehouse}.`,
   };
 
   const TABLE_TO_CONSTRAINT = {
-    INVENTORY_PHYSICALSTOCK: 'STOCKHU_PER_WH',
-    INVENTORY_SERIALREGISTRY: 'SN_PER_LOC_PROD',
-    INVENTORY_TOPHUREGISTRY: 'TOPHU_PER_WH', // ← add this
+    INVENTORY_SERIALNUMBERS: 'SN_PER_LOC_PROD',
+    INVENTORY_TOPHUREGISTRY: 'TOPHU_PER_WH',
   };
 
   function _buildDuplicateConstraintMessage(err, req, params = {}) {
@@ -424,11 +432,12 @@ module.exports = cds.service.impl(async function () {
       (msg.match(/Table\(([^)]+)\)/i)?.[1]) ||
       (msg.match(/for table [^:]*:([A-Z0-9_:$]+)/i)?.[1]) ||
       '';
-    const tableName = tableNameRaw.toUpperCase();
+    const tableUpper = tableNameRaw.toUpperCase();
+    const tableBase = tableUpper.split('$')[0];
 
     const key =
-      Object.keys(MESSAGES).find(k => indexName.includes(k) || msg.includes(k)) ||
-      Object.entries(TABLE_TO_CONSTRAINT).find(([tbl]) => tableName.includes(tbl))?.[1] ||
+      (Object.keys(MESSAGES).find(k => indexName.includes(k) || msg.includes(k))) ||
+      TABLE_TO_CONSTRAINT[tableBase] ||
       null;
 
     if (!key) return null;

@@ -5,12 +5,6 @@ using {
   managed
 } from '@sap/cds/common';
 
-// --- Core physical stock line
-
-@assert.unique: {stockHU_per_wh: [
-  warehouse,
-  stockHU
-]}
 entity PhysicalStock : cuid, managed {
   warehouse      : String(10);
   storageBin     : String(20);
@@ -32,7 +26,7 @@ entity PhysicalStock : cuid, managed {
 ]}
 entity SerialNumbers : managed {
   key physicalStockId : UUID;
-  key serialNumber    : String(40); // immutable key, fine
+  key serialNumber    : String(40); 
 
       physicalStock   : Association to PhysicalStock
                           on physicalStock.ID = physicalStockId;
