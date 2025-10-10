@@ -333,15 +333,15 @@ module.exports = cds.service.impl(async function () {
       );
 
       // Aggregate by:
-      //  - SAME STOCK HU: key = (warehouse, stockHU, product, batch, uom)
-      //  - OTHERWISE (no stockHU): key = (warehouse, storageBin, product, batch, uom)
+      //  - SAME STOCK HU: key = (warehouse, topHU, stockHU, product, batch, uom)
+      //  - OTHERWISE (no stockHU): key = (warehouse, topHU, storageBin, product, batch, uom)
       const agg = new Map();
 
       for (const r of stockRowsRaw) {
         const hasStockHU = r.stockHU != null && r.stockHU !== '';
         const key = hasStockHU
-          ? `SHU|${r.warehouse}|${r.stockHU}|${r.product || ''}|${r.batch || ''}|${r.uom || ''}`
-          : `BIN|${r.warehouse}|${r.storageBin}|${r.product || ''}|${r.batch || ''}|${r.uom || ''}`;
+          ? `SHU|${r.warehouse}|${r.topHU || ''}|${r.stockHU}|${r.product || ''}|${r.batch || ''}|${r.uom || ''}`
+          : `BIN|${r.warehouse}|${r.topHU || ''}|${r.storageBin}|${r.product || ''}|${r.batch || ''}|${r.uom || ''}`;
 
         const prev = agg.get(key);
         if (!prev) {
@@ -405,7 +405,6 @@ module.exports = cds.service.impl(async function () {
       return req.reject(400, `Excel export failed: ${err.message}`);
     }
   }
-
 
   const MESSAGES = {
     SN_PER_LOC_PROD: p =>

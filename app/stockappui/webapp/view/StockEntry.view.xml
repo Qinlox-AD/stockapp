@@ -116,31 +116,76 @@
 
         <!-- Footer buttons -->
         <footer>
-            <Toolbar>
+            <OverflowToolbar
+                id="StockEntryFooter"
+                design="Solid"
+                width="100%"
+            >
                 <ToolbarSpacer />
+
                 <Button
                     text="{i18n>confirmF4}"
                     type="Emphasized"
                     press="onConfirm"
-                />
+                >
+                    <layoutData>
+                        <OverflowToolbarLayoutData
+                            priority="NeverOverflow"
+                            group="AlwaysVisible"
+                        />
+                    </layoutData>
+                </Button>
+
                 <Button
                     text="{i18n>btnTopHUF1}"
                     press="onOpenTopHU"
-                />
+                >
+                    <layoutData>
+                        <OverflowToolbarLayoutData
+                            priority="High"
+                            group="AlwaysVisible"
+                        />
+                    </layoutData>
+                </Button>
+
                 <Button
                     text="{i18n>btnSerNbF2}"
                     press="onOpenSerNb"
-                />
+                >
+                    <layoutData>
+                        <OverflowToolbarLayoutData
+                            priority="High"
+                            group="AlwaysVisible"
+                        />
+                    </layoutData>
+                </Button>
+
                 <Button
                     text="{i18n>btnListF6}"
                     press="onOpenList"
-                />
+                >
+                    <layoutData>
+                        <OverflowToolbarLayoutData
+                            priority="High"
+                            group="AlwaysVisible"
+                        />
+                    </layoutData>
+                </Button>
+
                 <Button
                     text="{i18n>backF7}"
                     press="onBackUp"
-                />
+                >
+                    <layoutData>
+                        <OverflowToolbarLayoutData
+                            priority="High"
+                            group="AlwaysVisible"
+                        />
+                    </layoutData>
+                </Button>
+
                 <ToolbarSpacer />
-            </Toolbar>
+            </OverflowToolbar>
         </footer>
     </Page>
 </mvc:View>
