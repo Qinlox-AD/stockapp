@@ -18,12 +18,14 @@
   },
   "scripts": {
     "start": "cds-serve",
-    "watch": "cds watch --open stockappui/index.html?sap-ui-xx-viewCache=false",
+    "watch-stoackapp-ui": "cds watch --open stockappui/index.html?sap-ui-xx-viewCache=false",
+    "watch-monitoring-ui": "cds watch --open stockappui/index.html?sap-ui-xx-viewCache=false",
     "watch:noopen": "cds watch --in-memory false",
     "db:deploy": "cds deploy --to sqlite:db/dev.db",
     "db:reset": "rimraf db/dev.db && npm run db:deploy",
     "undeploy": "cf undeploy stockapp_backend --delete-services --delete-service-keys --delete-service-brokers",
     "build": "rimraf resources mta_archives && mbt build --mtar archive",
+    "port": "npx kill-port 4004",
     "deploy": "cf deploy mta_archives/archive.mtar"
   },
   "private": true,

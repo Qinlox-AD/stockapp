@@ -26,7 +26,7 @@ entity PhysicalStock : cuid, managed {
 ]}
 entity SerialNumbers : managed {
   key physicalStockId : UUID;
-  key serialNumber    : String(40); 
+  key serialNumber    : String(40);
 
       physicalStock   : Association to PhysicalStock
                           on physicalStock.ID = physicalStockId;
@@ -46,3 +46,27 @@ entity TopHURegistry : managed {
   key storageBin : String(20);
   key topHU      : String(30);
 }
+
+view PhysicalStockQuantities as select from inventory.PhysicalStock {
+  key warehouse,
+  key storageBin,
+  key topHU,
+  key packMatTopHU,
+  key stockHU,
+  key packMatStockHU,
+  key product,
+  key batch,
+  key uom,
+  sum(quantity) as totalQuantity : Decimal(15,3)
+}
+group by
+  warehouse,
+  storageBin,
+  topHU,
+  packMatTopHU,
+  stockHU,
+  packMatStockHU,
+  product,
+  batch,
+  uom;
+

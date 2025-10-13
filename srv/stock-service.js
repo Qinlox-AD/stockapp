@@ -2,11 +2,11 @@
 const cds = require('@sap/cds');
 const ExcelJS = require('exceljs');
 
-const { SELECT, INSERT, UPDATE, UPSERT, DELETE } = cds.ql;
+const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 
 module.exports = cds.service.impl(async function () {
   // 🔑 Use the **service** entities (not cds.entities / db namespace)
-  const { PhysicalStock, SerialNumbers, TopHURegistry } = this.entities;
+  const { PhysicalStock, SerialNumbers, TopHURegistry, PhysicalStockQuantities } = this.entities;
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -18,7 +18,6 @@ module.exports = cds.service.impl(async function () {
   this.on('ScanSerial', scanSerial);
   this.on('ConfirmSerials', confirmSerials);
   this.on('ConfirmStockWithSerials', confirmStockWithSerials);
-  this.on('ExportBin', exportBin);
   this.on('ExportPhysicalStockExcel', exportPhysicalStockExcel);
 
   // -----------------------------------------`----------------------------------
@@ -104,12 +103,14 @@ module.exports = cds.service.impl(async function () {
     };
 
     // --- Only check for duplicates if stockHU exists ---
-    if (row.stockHU) {
+    if (row.stockHU && !row.batch && !row.product && !row.quantity) {
       const exists = await tx.run(
-        SELECT.one.from(PhysicalStock).where({
-          warehouse: row.warehouse,
-          stockHU: row.stockHU
-        })
+        SELECT.one.from(PhysicalStock)
+          .where`
+        warehouse  = ${row.warehouse}
+        and stockHU = ${row.stockHU}
+        and storageBin <> ${row.storageBin}
+      `
       );
       if (exists) {
         return req.reject(
@@ -247,7 +248,11 @@ module.exports = cds.service.impl(async function () {
       if (!host) {
         if (stockHU) {
           const dup = await tx.run(
-            SELECT.one.from(PhysicalStock).where({ warehouse, stockHU })
+            SELECT.one.from(PhysicalStock).where`
+            warehouse  = ${warehouse}
+            and stockHU = ${stockHU}
+            and storageBin <> ${storageBin}
+          `
           );
           if (dup) {
             return req.reject(
@@ -298,32 +303,16 @@ module.exports = cds.service.impl(async function () {
     }
   }
 
-
-
-  async function exportBin(req) {
-    const tx = cds.tx(req);
-    try {
-      const { warehouse, storageBin } = req.data;
-      const rows = await tx.run(
-        SELECT.from(PhysicalStock)
-          .where({ warehouse, storageBin })
-          .orderBy('topHU', 'stockHU', 'product')
-      );
-      return rows;
-    } catch (err) {
-      return req.reject(400, `ExportBin failed: ${err.message}`);
-    }
-  }
-
   async function exportPhysicalStockExcel(req) {
     const tx = cds.tx(req);
+
     try {
       const { warehouse } = req.data;
 
-      const stockRowsRaw = await tx.run(
-        SELECT.from(PhysicalStock)
+      const stockRows = await tx.run(
+        SELECT.from(PhysicalStockQuantities)
           .where({ warehouse })
-          .orderBy('topHU', 'stockHU', 'product')
+          .orderBy('topHU', 'stockHU', 'product', 'storageBin')
       );
 
       const serialRows = await tx.run(
@@ -332,41 +321,8 @@ module.exports = cds.service.impl(async function () {
           .orderBy('physicalStockId', 'serialNumber')
       );
 
-      // Aggregate by:
-      //  - SAME STOCK HU: key = (warehouse, topHU, stockHU, product, batch, uom)
-      //  - OTHERWISE (no stockHU): key = (warehouse, topHU, storageBin, product, batch, uom)
-      const agg = new Map();
-
-      for (const r of stockRowsRaw) {
-        const hasStockHU = r.stockHU != null && r.stockHU !== '';
-        const key = hasStockHU
-          ? `SHU|${r.warehouse}|${r.topHU || ''}|${r.stockHU}|${r.product || ''}|${r.batch || ''}|${r.uom || ''}`
-          : `BIN|${r.warehouse}|${r.topHU || ''}|${r.storageBin}|${r.product || ''}|${r.batch || ''}|${r.uom || ''}`;
-
-        const prev = agg.get(key);
-        if (!prev) {
-          agg.set(key, {
-            warehouse: r.warehouse,
-            storageBin: r.storageBin,
-            topHU: r.topHU,
-            packMatTopHU: r.packMatTopHU,
-            stockHU: r.stockHU,
-            packMatStockHU: r.packMatStockHU,
-            product: r.product,
-            batch: r.batch,
-            quantity: Number(r.quantity) || 0,
-            uom: r.uom
-          });
-        } else {
-          prev.quantity = (Number(prev.quantity) || 0) + (Number(r.quantity) || 0);
-        }
-      }
-
-      const stockRows = Array.from(agg.values());
-
       const wb = new ExcelJS.Workbook();
 
-      // --- Sheet 1: Stock (aggregated)
       const ws1 = wb.addWorksheet('Stock');
       ws1.columns = [
         { header: 'Warehouse', key: 'warehouse', width: 12 },
@@ -377,12 +333,11 @@ module.exports = cds.service.impl(async function () {
         { header: 'PackMat Stock HU', key: 'packMatStockHU', width: 20 },
         { header: 'Product', key: 'product', width: 20 },
         { header: 'Batch', key: 'batch', width: 12 },
-        { header: 'Quantity', key: 'quantity', width: 10 },
+        { header: 'Quantity', key: 'totalQuantity', width: 10 },
         { header: 'UoM', key: 'uom', width: 8 },
       ];
       ws1.addRows(stockRows);
 
-      // --- Sheet 2: Serials (unchanged)
       const ws2 = wb.addWorksheet('SerialNumbers');
       ws2.columns = [
         { header: 'Serial Number', key: 'serialNumber', width: 24 },

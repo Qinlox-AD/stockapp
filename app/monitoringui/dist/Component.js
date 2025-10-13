@@ -1,0 +1,2 @@
+sap.ui.define(["sap/ui/core/UIComponent"],t=>{"use strict";return t.extend("monitoringui.Component",{metadata:{manifest:"json"},init(){t.prototype.init.apply(this,arguments)}})});
+//# sourceMappingURL=Component.js.map

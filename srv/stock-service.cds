@@ -16,22 +16,22 @@ type PhysicalStockInput  : {
 
 // --- Payload for ConfirmTopHU
 type TopHUInput          : {
-    warehouse  : String(10);
-    storageBin : String(20);
-    topHU      : String(30);
-    packMatTopHU    : String(40);
+    warehouse    : String(10);
+    storageBin   : String(20);
+    topHU        : String(30);
+    packMatTopHU : String(40);
 };
 
 // --- Result shape returned by actions that confirm stock
 type PhysicalStockResult : {
-    ID            : UUID;
-    warehouse     : String(10);
-    storageBin    : String(20);
-    topHU         : String(30);
-    stockHU       : String(30);
-    product       : String(40);
-    quantity      : Decimal(13, 3);
-    uom           : String(3);
+    ID         : UUID;
+    warehouse  : String(10);
+    storageBin : String(20);
+    topHU      : String(30);
+    stockHU    : String(30);
+    product    : String(40);
+    quantity   : Decimal(13, 3);
+    uom        : String(3);
 };
 
 // --- Result for serial-related actions (no 'ok')
@@ -42,10 +42,11 @@ type ScanSerialsResult   : {
 
 service StockService @(path: '/rf') {
     @cds.redirection.target
-    entity PhysicalStock as projection on inventory.PhysicalStock;
+    entity PhysicalStock           as projection on inventory.PhysicalStock;
 
-    entity SerialNumbers as projection on inventory.SerialNumbers;
-    entity TopHURegistry as projection on inventory.TopHURegistry;
+    entity SerialNumbers           as projection on inventory.SerialNumbers;
+    entity TopHURegistry           as projection on inventory.TopHURegistry;
+    entity PhysicalStockQuantities as projection on inventory.PhysicalStockQuantities;
 
     action ConfirmTopHU(input: TopHUInput)                                                  returns PhysicalStockResult;
     action ConfirmStock(entry: PhysicalStockInput)                                          returns PhysicalStockResult;

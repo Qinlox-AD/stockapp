@@ -128,7 +128,6 @@ sap.ui.define([
         MessageToast.show(this.getI18nText("msgConfirmSuccess"));
         vm.setProperty("/entry", { hu: "", packMat: "", product: "", batch: "", quantity: null, uom: "" });
 
-        vm.setProperty("/__sub/topHu", "");
         vm.setProperty("/__sub/packMatTopHu", "");
       } catch (e) {
         this.showActionError(e, "Confirm failed");

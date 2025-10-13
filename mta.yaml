@@ -49,8 +49,12 @@ modules:
           artifacts:
             - stockappui.zip
           target-path: app/
+        - name: monitoringui
+          artifacts:
+            - monitoringui.zip
+          target-path: app/
 
-  # === UI5 module ===
+  # === Existing UI5 app ===
   - name: stockappui
     type: html5
     path: app/stockappui
@@ -62,7 +66,19 @@ modules:
       build-result: dist
       supported-platforms: []
 
-  # === Destination Content (important for Work Zone/MAR) ===
+  # === New UI5 app: monitoringui ===
+  - name: monitoringui
+    type: html5
+    path: app/monitoringui
+    build-parameters:
+      builder: custom
+      commands:
+        - npm install
+        - npm run build:cf
+      build-result: dist
+      supported-platforms: []
+
+  # === Destination Content (Work Zone / MAR) ===
   - name: stockapp_backend-destination-content
     type: com.sap.application.content
     requires:
