@@ -47,26 +47,3 @@ entity TopHURegistry : managed {
   key topHU      : String(30);
 }
 
-view PhysicalStockQuantities as select from inventory.PhysicalStock {
-  key warehouse,
-  key storageBin,
-  key topHU,
-  key packMatTopHU,
-  key stockHU,
-  key packMatStockHU,
-  key product,
-  key batch,
-  key uom,
-  sum(quantity) as totalQuantity : Decimal(15,3)
-}
-group by
-  warehouse,
-  storageBin,
-  topHU,
-  packMatTopHU,
-  stockHU,
-  packMatStockHU,
-  product,
-  batch,
-  uom;
-

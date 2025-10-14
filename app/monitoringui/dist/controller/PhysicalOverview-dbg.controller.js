@@ -8,9 +8,7 @@ sap.ui.define([
 
   return Controller.extend("monitoringui.controller.PhysicalOverview", {
 
-    onInit: function () {
-
-    },
+    onInit: function () { },
 
     _getSelectedContext: function () {
       const aSel = this.byId("physTable").getSelectedContexts();
@@ -25,6 +23,7 @@ sap.ui.define([
       const sQuery = oEvent.getParameter("newValue") || "";
       const oBinding = this.byId("physTable").getBinding("items");
       const aFilters = [];
+
       if (sQuery) {
         aFilters.push(new Filter({
           filters: [
@@ -38,6 +37,7 @@ sap.ui.define([
           and: false
         }));
       }
+
       oBinding.filter(aFilters, "Application");
     },
 
@@ -45,9 +45,21 @@ sap.ui.define([
       const oCtx = this._getSelectedContext();
       if (!oCtx) { MessageToast.show("Select a row first"); return; }
 
-      const sPhysId = oCtx.getProperty("ID");
-      const oSerialsTable = this.byId("serialsTable");
+      const sWarehouse = oCtx.getProperty("warehouse");
+      const sStorageBin = oCtx.getProperty("storageBin");
+      const sTopHU = oCtx.getProperty("topHU");
+      const sStockHU = oCtx.getProperty("stockHU");
+      const sProduct = oCtx.getProperty("product");
 
+      const aFilters = [
+        new Filter("warehouse", FilterOperator.EQ, sWarehouse),
+        new Filter("storageBin", FilterOperator.EQ, sStorageBin),
+        new Filter("topHU", FilterOperator.EQ, sTopHU || null),
+        new Filter("stockHU", FilterOperator.EQ, sStockHU || null),
+        new Filter("product", FilterOperator.EQ, sProduct || null)
+      ];
+
+      const oSerialsTable = this.byId("serialsTable");
       oSerialsTable.unbindItems();
       oSerialsTable.removeAllItems();
 
@@ -55,15 +67,41 @@ sap.ui.define([
 
       oSerialsTable.bindItems({
         path: "/SerialNumbers",
-        parameters: { $count: true },
-        filters: [new Filter("physicalStockId", FilterOperator.EQ, sPhysId)],
-        template: oTemplate
+        template: oTemplate,
+        templateShareable: false,
+        filters: aFilters
       });
 
-      this.byId("serialsHint").setText(`Serials for PhysicalStock ID ${sPhysId}`);
+      this.byId("serialsHint").setText(
+        `Serials for ${sWarehouse} / ${sStorageBin} / ${sProduct || "(no product)"} / TopHU ${sTopHU || "–"} / StockHU ${sStockHU || "–"}`
+      );
       MessageToast.show("Serial numbers loaded");
-    }
+    },
 
+    onRefresh: function () {
+      const oPhysTable = this.byId("physTable");
+      const oSerialsTable = this.byId("serialsTable");
+
+      const b1 = oPhysTable.getBinding("items");
+      const b2 = oSerialsTable.getBinding("items");
+
+      oPhysTable.setBusy(true);
+      if (b2) oSerialsTable.setBusy(true);
+
+      if (b1) {
+        b1.attachEventOnce("dataReceived", () => oPhysTable.setBusy(false));
+        b1.refresh();
+      } else {
+        oPhysTable.setBusy(false);
+      }
+
+      if (b2) {
+        b2.attachEventOnce("dataReceived", () => oSerialsTable.setBusy(false));
+        b2.refresh();
+      }
+
+      MessageToast.show("Refreshing data…");
+    }
 
   });
 });

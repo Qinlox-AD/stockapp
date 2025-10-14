@@ -22,7 +22,6 @@ type TopHUInput          : {
     packMatTopHU : String(40);
 };
 
-// --- Result shape returned by actions that confirm stock
 type PhysicalStockResult : {
     ID         : UUID;
     warehouse  : String(10);
@@ -34,19 +33,18 @@ type PhysicalStockResult : {
     uom        : String(3);
 };
 
-// --- Result for serial-related actions (no 'ok')
 type ScanSerialsResult   : {
     quantity : Decimal(13, 3);
     id       : UUID;
 };
 
 service StockService @(path: '/rf') {
+
     @cds.redirection.target
     entity PhysicalStock           as projection on inventory.PhysicalStock;
 
     entity SerialNumbers           as projection on inventory.SerialNumbers;
     entity TopHURegistry           as projection on inventory.TopHURegistry;
-    entity PhysicalStockQuantities as projection on inventory.PhysicalStockQuantities;
 
     action ConfirmTopHU(input: TopHUInput)                                                  returns PhysicalStockResult;
     action ConfirmStock(entry: PhysicalStockInput)                                          returns PhysicalStockResult;
@@ -60,4 +58,5 @@ service StockService @(path: '/rf') {
     action ExportBin(warehouse: String(10), storageBin: String(20))                         returns many PhysicalStock;
 
     action ExportPhysicalStockExcel(warehouse: String(10), storageBin: String(20))          returns LargeBinary;
+
 }

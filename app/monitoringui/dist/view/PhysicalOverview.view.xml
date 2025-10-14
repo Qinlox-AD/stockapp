@@ -7,20 +7,17 @@
     <Toolbar>
       <Title text="Physical Stock" level="H3"/>
       <ToolbarSpacer/>
+      <Button text="Refresh" type="Transparent" press=".onRefresh"/>
       <Button id="btnDownload" text="Download Serials" type="Emphasized"
               press=".onDownloadSerials" enabled="false" />
     </Toolbar>
 
-    <!-- Top table: declarative binding -->
     <Table id="physTable"
            mode="SingleSelectLeft"
            growing="true"
            growingScrollToLoad="true"
            selectionChange=".onPhysSelect"
-           items="{
-             path: '/PhysicalStock',
-             parameters: { $count: true }
-           }">
+           items="{ path: '/PhysicalStock' }">
       <headerToolbar>
         <Toolbar>
           <SearchField width="20rem" liveChange=".onSearchPhysical"/>
@@ -45,7 +42,7 @@
             <Text text="{storageBin}"/>
             <Text text="{product}"/>
             <Text text="{batch}"/>
-            <ObjectNumber number="{quantity}" unit="{uom}"/>
+            <ObjectNumber number="{totalQuantity}" unit="{uom}"/>
             <Text text="{uom}"/>
             <Text text="{topHU}"/>
             <Text text="{stockHU}"/>
@@ -60,8 +57,10 @@
       <Text id="serialsHint" text="Select a row and click Download Serials"/>
     </Toolbar>
 
-    <!-- Bottom table: template kept, controller rebinds on demand -->
-    <Table id="serialsTable" growing="true" growingScrollToLoad="true" noDataText="No serials loaded">
+    <Table id="serialsTable"
+           growing="true"
+           growingScrollToLoad="true"
+           noDataText="No serials loaded">
       <columns>
         <Column><Text text="Serial Number"/></Column>
         <Column><Text text="Warehouse"/></Column>

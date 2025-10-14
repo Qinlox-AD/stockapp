@@ -1,87 +1,208 @@
 <mvc:View
-  controllerName="monitoringui.controller.PhysicalOverview"
-  xmlns:mvc="sap.ui.core.mvc"
-  xmlns="sap.m">
-
-  <VBox class="sapUiSmallMargin">
-    <Toolbar>
-      <Title text="Physical Stock" level="H3"/>
-      <ToolbarSpacer/>
-      <Button id="btnDownload" text="Download Serials" type="Emphasized"
-              press=".onDownloadSerials" enabled="false" />
-    </Toolbar>
-
-    <!-- Top table: declarative binding -->
-    <Table id="physTable"
-           mode="SingleSelectLeft"
-           growing="true"
-           growingScrollToLoad="true"
-           selectionChange=".onPhysSelect"
-           items="{
-             path: '/PhysicalStockQuantities',
-             parameters: { $count: true }
-           }">
-      <headerToolbar>
+    controllerName="monitoringui.controller.PhysicalOverview"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:mdc="sap.ui.mdc"
+>
+    <VBox class="sapUiSmallMargin">
         <Toolbar>
-          <SearchField width="20rem" liveChange=".onSearchPhysical"/>
+            <Title
+                text="Physical Stock"
+                level="H3"
+            />
+            <ToolbarSpacer />
+            <Button
+                text="Refresh"
+                type="Transparent"
+                press=".onRefresh"
+            />
+            <Button
+                id="btnDownload"
+                text="Download Serials"
+                type="Emphasized"
+                press=".onDownloadSerials"
+                enabled="false"
+            />
+            <Button
+                id="btnEdit"
+                text="Edit"
+                press=".onStartEdit"
+                enabled="false"
+            />
+            <Button
+                id="btnDelete"
+                text="Delete"
+                type="Reject"
+                press=".onDeleteRow"
+                enabled="false"
+            />
         </Toolbar>
-      </headerToolbar>
 
-      <columns>
-        <Column><Text text="Warehouse"/></Column>
-        <Column><Text text="Bin"/></Column>
-        <Column><Text text="Product"/></Column>
-        <Column><Text text="Batch"/></Column>
-        <Column hAlign="End"><Text text="Qty"/></Column>
-        <Column><Text text="UoM"/></Column>
-        <Column><Text text="Top HU"/></Column>
-        <Column><Text text="Stock HU"/></Column>
-      </columns>
+        <mdc:FilterBar
+            id="fbPhys"
+            showGoButton="true"
+            showAdaptFiltersButton="false"
+            search=".onFBSearch"
+        >
+            <mdc:filterItems>
+                <mdc:FilterField
+                    id="ffSearch"
+                    label="Search"
+                    propertyKey="$search"
+                    maxConditions="1"
+                />
+                <mdc:FilterField
+                    id="ffWarehouse"
+                    label="Warehouse"
+                    propertyKey="warehouse"
+                    maxConditions="-1"
+                />
+                <mdc:FilterField
+                    id="ffBin"
+                    label="Bin"
+                    propertyKey="storageBin"
+                    maxConditions="-1"
+                />
+                <mdc:FilterField
+                    id="ffStockHU"
+                    label="Stock HU"
+                    propertyKey="stockHU"
+                    maxConditions="-1"
+                />
+                <mdc:FilterField
+                    id="ffTopHU"
+                    label="Top HU"
+                    propertyKey="topHU"
+                    maxConditions="-1"
+                />
+                <mdc:FilterField
+                    id="ffProduct"
+                    label="Product"
+                    propertyKey="product"
+                    maxConditions="-1"
+                />
+                <mdc:FilterField
+                    id="ffBatch"
+                    label="Batch"
+                    propertyKey="batch"
+                    maxConditions="-1"
+                />
+            </mdc:filterItems>
+        </mdc:FilterBar>
 
-      <items>
-        <ColumnListItem>
-          <cells>
-            <Text text="{warehouse}"/>
-            <Text text="{storageBin}"/>
-            <Text text="{product}"/>
-            <Text text="{batch}"/>
-            <ObjectNumber number="{quantity}" unit="{uom}"/>
-            <Text text="{uom}"/>
-            <Text text="{topHU}"/>
-            <Text text="{stockHU}"/>
-          </cells>
-        </ColumnListItem>
-      </items>
-    </Table>
+        <Table
+            id="physTable"
+            mode="SingleSelectLeft"
+            growing="true"
+            growingScrollToLoad="true"
+            selectionChange=".onPhysSelect"
+            items="{ path: '/PhysicalStock' }"
+        >
+            <columns>
+                <Column>
+                    <Text text="Warehouse" />
+                </Column>
+                <Column>
+                    <Text text="Bin" />
+                </Column>
+                <Column>
+                    <Text text="Product" />
+                </Column>
+                <Column>
+                    <Text text="Batch" />
+                </Column>
+                <Column hAlign="End">
+                    <Text text="Qty" />
+                </Column>
+                <Column>
+                    <Text text="UoM" />
+                </Column>
+                <Column>
+                    <Text text="Top HU" />
+                </Column>
+                <Column>
+                    <Text text="Stock HU" />
+                </Column>
+            </columns>
 
-    <Toolbar class="sapUiTinyMarginTop">
-      <Title text="Serial Numbers" level="H3"/>
-      <ToolbarSpacer/>
-      <Text id="serialsHint" text="Select a row and click Download Serials"/>
-    </Toolbar>
+            <items>
+                <ColumnListItem>
+                    <cells>
+                        <Text text="{warehouse}" />
+                        <Text text="{storageBin}" />
+                        <Text text="{product}" />
 
-    <!-- Bottom table: template kept, controller rebinds on demand -->
-    <Table id="serialsTable" growing="true" growingScrollToLoad="true" noDataText="No serials loaded">
-      <columns>
-        <Column><Text text="Serial Number"/></Column>
-        <Column><Text text="Warehouse"/></Column>
-        <Column><Text text="Bin"/></Column>
-        <Column><Text text="Product"/></Column>
-        <Column><Text text="Top HU"/></Column>
-        <Column><Text text="Stock HU"/></Column>
-      </columns>
-      <items>
-        <ColumnListItem id="serialsItemTemplate">
-          <cells>
-            <ObjectIdentifier title="{serialNumber}"/>
-            <Text text="{warehouse}"/>
-            <Text text="{storageBin}"/>
-            <Text text="{product}"/>
-            <Text text="{topHU}"/>
-            <Text text="{stockHU}"/>
-          </cells>
-        </ColumnListItem>
-      </items>
-    </Table>
-  </VBox>
+                        <Input
+                            width="100%"
+                            value="{ path: 'batch', mode: 'sap.ui.model.BindingMode.OneTime' }"
+                        />
+
+                        <Input
+                            type="Number"
+                            textAlign="End"
+                            width="100%"
+                            value="{ path: 'totalQuantity', mode: 'sap.ui.model.BindingMode.OneTime' }"
+                        />
+
+                        <Text text="{uom}" />
+                        <Text text="{topHU}" />
+                        <Text text="{stockHU}" />
+                    </cells>
+                </ColumnListItem>
+            </items>
+        </Table>
+
+        <Toolbar class="sapUiTinyMarginTop">
+            <Title
+                text="Serial Numbers"
+                level="H3"
+            />
+            <ToolbarSpacer />
+            <Text
+                id="serialsHint"
+                text="Select a row and click Download Serials"
+            />
+        </Toolbar>
+
+        <Table
+            id="serialsTable"
+            growing="true"
+            growingScrollToLoad="true"
+            noDataText="No serials loaded"
+        >
+            <columns>
+                <Column>
+                    <Text text="Serial Number" />
+                </Column>
+                <Column>
+                    <Text text="Warehouse" />
+                </Column>
+                <Column>
+                    <Text text="Bin" />
+                </Column>
+                <Column>
+                    <Text text="Product" />
+                </Column>
+                <Column>
+                    <Text text="Top HU" />
+                </Column>
+                <Column>
+                    <Text text="Stock HU" />
+                </Column>
+            </columns>
+
+            <items>
+                <ColumnListItem id="serialsItemTemplate">
+                    <cells>
+                        <ObjectIdentifier title="{serialNumber}" />
+                        <Text text="{warehouse}" />
+                        <Text text="{storageBin}" />
+                        <Text text="{product}" />
+                        <Text text="{topHU}" />
+                        <Text text="{stockHU}" />
+                    </cells>
+                </ColumnListItem>
+            </items>
+        </Table>
+    </VBox>
 </mvc:View>

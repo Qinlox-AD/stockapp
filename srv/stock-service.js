@@ -1,28 +1,23 @@
-// srv/stock-service.js (example path)
+// srv/stock-service.js
 const cds = require('@sap/cds');
 const ExcelJS = require('exceljs');
 
 const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 
 module.exports = cds.service.impl(async function () {
-  // 🔑 Use the **service** entities (not cds.entities / db namespace)
-  const { PhysicalStock, SerialNumbers, TopHURegistry, PhysicalStockQuantities } = this.entities;
+  const { PhysicalStock, SerialNumbers, TopHURegistry } = this.entities;
 
-  // ---------------------------------------------------------------------------
-  // Handlers
-  // ---------------------------------------------------------------------------
   this.before('CREATE', PhysicalStock, validatePhysicalStock);
 
   this.on('ConfirmTopHU', confirmTopHU);
   this.on('ConfirmStock', confirmStock);
+  this.on('ConfirmStockWithSerials', confirmStockWithSerials);
   this.on('ScanSerial', scanSerial);
   this.on('ConfirmSerials', confirmSerials);
-  this.on('ConfirmStockWithSerials', confirmStockWithSerials);
   this.on('ExportPhysicalStockExcel', exportPhysicalStockExcel);
 
-  // -----------------------------------------`----------------------------------
-  // Hooks / Validators
-  // ---------------------------------------------------------------------------
+  this.on('DELETE', PhysicalStock, deleteFromAggregation);
+
   function validatePhysicalStock(req) {
     try {
       const { product, quantity } = req.data;
@@ -34,9 +29,6 @@ module.exports = cds.service.impl(async function () {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Actions
-  // ---------------------------------------------------------------------------
   async function confirmTopHU(req) {
     const tx = cds.tx(req);
     const { warehouse, storageBin, topHU, packMat } = req.data.input || {};
@@ -80,66 +72,129 @@ module.exports = cds.service.impl(async function () {
     }
   }
 
-
+  function buildAggregationKey(src) {
+    return {
+      warehouse: src.warehouse ?? null,
+      storageBin: src.storageBin ?? null,
+      topHU: src.topHU ?? null,
+      packMatTopHU: src.packMatTopHU ?? null,
+      stockHU: src.stockHU ?? null,
+      packMatStockHU: src.packMatStockHU ?? null,
+      product: src.product ?? null,
+      batch: src.batch ?? null,
+      uom: src.uom ?? null
+    };
+  }
 
   async function confirmStock(req) {
     const tx = cds.tx(req);
+    const { PhysicalStock } = this.entities;
 
     const e = req.data?.entry || {};
-    const ID = cds.utils.uuid();
+    const qty = e.quantity == null ? 0 : Number(e.quantity);
 
-    const row = {
-      ID,
+    const key = {
       warehouse: e.warehouse ?? null,
       storageBin: e.storageBin ?? null,
       topHU: e.topHU ?? null,
-      stockHU: e.stockHU ?? null,
       packMatTopHU: e.packMatTopHU ?? null,
+      stockHU: e.stockHU ?? null,
       packMatStockHU: e.packMatStockHU ?? null,
       product: e.product ?? null,
       batch: e.batch ?? null,
-      quantity: e.quantity == null ? 0 : Number(e.quantity),
       uom: e.uom ?? null
     };
 
-    // --- Only check for duplicates if stockHU exists ---
-    if (row.stockHU && !row.batch && !row.product && !row.quantity) {
+    if (key.stockHU && !key.batch && !key.product && !qty) {
       const exists = await tx.run(
-        SELECT.one.from(PhysicalStock)
-          .where`
-        warehouse  = ${row.warehouse}
-        and stockHU = ${row.stockHU}
-        and storageBin <> ${row.storageBin}
+        SELECT.one.from(PhysicalStock).where`
+        warehouse  = ${key.warehouse}
+        and stockHU = ${key.stockHU}
+        and storageBin <> ${key.storageBin}
       `
       );
-      if (exists) {
-        return req.reject(
-          409,
-          `Duplicate Stock HU ${row.stockHU} already exists for warehouse ${row.warehouse}.`
+      if (exists) return req.reject(409, `Duplicate Stock HU ${key.stockHU} already exists for warehouse ${key.warehouse}.`);
+    }
+
+    const { id: ID, rowQuantity, totalQuantity } =
+      await upsertAddByKey(tx, PhysicalStock, key, qty);
+
+    return { ID, ...key, quantity: rowQuantity, totalQuantity };
+  }
+
+  async function confirmStockWithSerials(req) {
+    const tx = cds.tx(req);
+    const { PhysicalStock, SerialNumbers } = this.entities;
+
+    const { entry = {}, serials = [] } = req.data || {};
+    const {
+      warehouse, storageBin, topHU = null, stockHU = null,
+      product = null, batch = null, uom = null
+    } = entry;
+
+    if (!warehouse || !storageBin) return req.reject(400, 'warehouse & storageBin required');
+    if (serials.length && !product) return req.reject(400, 'Product is required when confirming serials');
+
+    const hostKey = { warehouse, storageBin, topHU, stockHU, product };
+    let host = await tx.run(SELECT.one.from(PhysicalStock).where(hostKey).forUpdate());
+    if (!host) {
+      if (stockHU) {
+        const dup = await tx.run(
+          SELECT.one.from(PhysicalStock).where`
+          warehouse  = ${warehouse}
+          and stockHU = ${stockHU}
+          and storageBin <> ${storageBin}
+        `
         );
+        if (dup) return req.reject(409, `Duplicate Stock HU ${stockHU} already exists for warehouse ${warehouse}.`);
+      }
+      const ID = cds.utils.uuid();
+      await tx.run(INSERT.into(PhysicalStock).entries({ ID, ...hostKey, batch, uom, quantity: 0 }));
+      host = { ID, ...hostKey, batch, uom, quantity: 0 };
+    }
+
+    const normalized = [...new Set((serials || []).map(s => String(s).trim().toUpperCase()).filter(Boolean))];
+
+    let addQty = 0;
+    if (normalized.length) {
+      const existing = await tx.run(
+        SELECT.from(SerialNumbers)
+          .columns('serialNumber')
+          .where({ physicalStockId: host.ID, serialNumber: { in: normalized } })
+      );
+      const existingSet = new Set(existing.map(r => r.serialNumber));
+      const toInsert = normalized.filter(sn => !existingSet.has(sn));
+      if (toInsert.length) {
+        await tx.run(INSERT.into(SerialNumbers).entries(
+          toInsert.map(sn => ({
+            physicalStockId: host.ID,
+            warehouse, storageBin, topHU, stockHU, product,
+            serialNumber: sn
+          }))
+        ));
+        addQty = toInsert.length;
       }
     }
 
-    try {
-      await tx.run(INSERT.into(PhysicalStock).entries(row));
-    } catch (err) {
-      throw err;
+    if (addQty > 0) {
+      const newHostQty = Number(host.quantity || 0) + addQty;
+      await tx.run(UPDATE(PhysicalStock, host.ID).set({ quantity: newHostQty }));
     }
 
-    return {
-      ID,
-      warehouse: row.warehouse,
-      storageBin: row.storageBin,
-      topHU: row.topHU,
-      stockHU: row.stockHU,
-      packMatTopHU: row.packMatTopHU,
-      packMatStockHU: row.packMatStockHU,
-      product: row.product,
-      batch: row.batch,
-      quantity: row.quantity,
-      uom: row.uom
-    };
+    const aggKey = buildAggregationKey({
+      warehouse, storageBin, topHU,
+      packMatTopHU: entry.packMatTopHU,
+      stockHU, packMatStockHU: entry.packMatStockHU,
+      product, batch, uom
+    });
+
+    const { id: ID, rowQuantity, totalQuantity } =
+      await upsertAddByKey(tx, PhysicalStock, aggKey, addQty);
+
+    return { ID, ...aggKey, quantity: rowQuantity, totalQuantity };
   }
+
+
 
   async function scanSerial(req) {
     const tx = cds.tx(req);
@@ -228,80 +283,6 @@ module.exports = cds.service.impl(async function () {
   }
 
 
-  async function confirmStockWithSerials(req) {
-    const tx = cds.tx(req);
-
-    try {
-      const { entry = {}, serials = [] } = req.data || {};
-      const {
-        warehouse, storageBin, topHU = null, stockHU = null,
-        product = null, batch = null, uom = null
-      } = entry;
-
-      if (!warehouse || !storageBin) return req.reject(400, 'warehouse & storageBin required');
-      if (serials.length && !product) return req.reject(400, 'Product is required when confirming serials');
-
-      const hostKey = { warehouse, storageBin, topHU, stockHU, product };
-
-      let host = await tx.run(SELECT.one.from(PhysicalStock).where(hostKey).forUpdate());
-
-      if (!host) {
-        if (stockHU) {
-          const dup = await tx.run(
-            SELECT.one.from(PhysicalStock).where`
-            warehouse  = ${warehouse}
-            and stockHU = ${stockHU}
-            and storageBin <> ${storageBin}
-          `
-          );
-          if (dup) {
-            return req.reject(
-              409,
-              `Duplicate Stock HU ${stockHU} already exists for warehouse ${warehouse}.`
-            );
-          }
-        }
-
-        const ID = cds.utils.uuid();
-        await tx.run(
-          INSERT.into(PhysicalStock).entries({
-            ID, ...hostKey, batch, uom, quantity: 0
-          })
-        );
-        host = { ID, ...hostKey };
-      }
-
-      const normalized = [...new Set(
-        (serials || []).map(s => String(s).trim().toUpperCase()).filter(Boolean)
-      )];
-
-      if (normalized.length) {
-        const rows = normalized.map(sn => ({
-          physicalStockId: host.ID,
-          warehouse, storageBin, topHU, stockHU, product,
-          serialNumber: sn
-        }));
-
-        try {
-          await tx.run(INSERT.into(SerialNumbers).entries(rows));
-        } catch (err) {
-          const handled = _buildDuplicateConstraintMessage(err, req, { warehouse, product, serialNumber: normalized.length === 1 ? normalized[0] : undefined });
-          if (handled) return handled;
-          throw err;
-        }
-      }
-
-      const { count } = await tx.run(
-        SELECT.one`count(*) as count`.from(SerialNumbers).where({ physicalStockId: host.ID })
-      );
-
-      await tx.run(UPDATE(PhysicalStock, host.ID).set({ quantity: count }));
-
-      return { quantity: count, id: host.ID };
-    } catch (err) {
-      return req.reject(400, `ConfirmStockWithSerials failed: ${err.message}`);
-    }
-  }
 
   async function exportPhysicalStockExcel(req) {
     const tx = cds.tx(req);
@@ -310,7 +291,7 @@ module.exports = cds.service.impl(async function () {
       const { warehouse } = req.data;
 
       const stockRows = await tx.run(
-        SELECT.from(PhysicalStockQuantities)
+        SELECT.from(PhysicalStock)
           .where({ warehouse })
           .orderBy('topHU', 'stockHU', 'product', 'storageBin')
       );
@@ -361,6 +342,32 @@ module.exports = cds.service.impl(async function () {
     }
   }
 
+  async function upsertAddByKey(tx, PhysicalStock, key, addQty) {
+    const existing = await tx.run(
+      SELECT.one.from(PhysicalStock)
+        .columns('ID', 'quantity')
+        .where(key)
+        .orderBy({ ref: ['createdAt'], sort: 'desc' })
+    );
+
+    if (existing) {
+      const newQty = Number(existing.quantity || 0) + Number(addQty || 0);
+      await tx.run(UPDATE(PhysicalStock, existing.ID).set({ quantity: newQty }));
+      const sumRow = await tx.run(
+        SELECT.one`coalesce(sum(quantity),0) as total`
+          .from(PhysicalStock)
+          .where(key)
+      );
+      return { id: existing.ID, rowQuantity: newQty, totalQuantity: Number(sumRow?.total || 0) };
+    }
+
+    const ID = cds.utils.uuid();
+    const initQty = Number(addQty || 0);
+    await tx.run(INSERT.into(PhysicalStock).entries({ ID, ...key, quantity: initQty }));
+    return { id: ID, rowQuantity: initQty, totalQuantity: initQty };
+  }
+
+
   const MESSAGES = {
     SN_PER_LOC_PROD: p =>
       `Duplicate serial ${p.serialNumber ?? ''} already exists for warehouse ${p.warehouse}.`,
@@ -399,6 +406,28 @@ module.exports = cds.service.impl(async function () {
     return req.reject(409, MESSAGES[key](params));
   }
 
+  async function deleteFromAggregation(req) {
+    const data = req.data || {};
+    const xpr = [];
 
+    const pushEq = (field, val) => {
+      if (val !== undefined && val !== null && String(val) !== '') {
+        if (xpr.length) xpr.push('and');
+        xpr.push({ ref: [field] }, '=', { val: val });
+      }
+    };
 
+    pushEq('warehouse', data.warehouse);
+    pushEq('storageBin', data.storageBin);
+    pushEq('topHU', data.topHU);
+    pushEq('stockHU', data.stockHU);
+    pushEq('product', data.product);
+    pushEq('batch', data.batch);
+
+    if (!xpr.length) return req.reject(400, 'No identifying fields provided for delete');
+
+    const tx = cds.tx(req);
+    const n = await tx.run(DELETE.from(PhysicalStock).where(xpr));
+    return n || 0;
+  }
 });
