@@ -26,7 +26,8 @@
     "undeploy": "cf undeploy stockapp_backend --delete-services --delete-service-keys --delete-service-brokers",
     "build": "rimraf resources mta_archives && mbt build --mtar archive",
     "port": "npx kill-port 4004",
-    "deploy": "cf deploy mta_archives/archive.mtar"
+    "deploy": "cf deploy mta_archives/archive.mtar",
+    "build-deploy": "npm run build && npm run deploy"
   },
   "private": true,
   "cds": {
