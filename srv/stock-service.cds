@@ -29,22 +29,22 @@ type PhysicalStockResult : {
     topHU      : String(30);
     stockHU    : String(30);
     product    : String(40);
-    quantity   : Decimal(13, 3);
+    quantity   : Decimal(13, 1);
     uom        : String(3);
 };
 
 type ScanSerialsResult   : {
-    quantity : Decimal(13, 3);
+    quantity : Decimal(13, 1);
     id       : UUID;
 };
 
 service StockService @(path: '/rf') {
 
     @cds.redirection.target
-    entity PhysicalStock           as projection on inventory.PhysicalStock;
+    entity PhysicalStock as projection on inventory.PhysicalStock;
 
-    entity SerialNumbers           as projection on inventory.SerialNumbers;
-    entity TopHURegistry           as projection on inventory.TopHURegistry;
+    entity SerialNumbers as projection on inventory.SerialNumbers;
+    entity TopHURegistry as projection on inventory.TopHURegistry;
 
     action ConfirmTopHU(input: TopHUInput)                                                  returns PhysicalStockResult;
     action ConfirmStock(entry: PhysicalStockInput)                                          returns PhysicalStockResult;
@@ -58,5 +58,26 @@ service StockService @(path: '/rf') {
     action ExportBin(warehouse: String(10), storageBin: String(20))                         returns many PhysicalStock;
 
     action ExportPhysicalStockExcel(warehouse: String(10), storageBin: String(20))          returns LargeBinary;
+
+    action EditStock(edits: array of {
+        warehouse        : String(10);
+        storageBin       : String(20);
+        topHU            : String(30);
+        stockHU          : String(30);
+        product          : String(40);
+        currentBatch     : String(20);
+        newBatch         : String(20);
+        uom              : String(3);
+        newTotalQuantity : Decimal(13, 1);
+    })                                                                                      returns array of {
+        warehouse        : String(10);
+        storageBin       : String(20);
+        topHU            : String(30);
+        stockHU          : String(30);
+        product          : String(40);
+        batch            : String(20);
+        uom              : String(3);
+        totalQuantity    : Decimal(13, 1);
+    };
 
 }

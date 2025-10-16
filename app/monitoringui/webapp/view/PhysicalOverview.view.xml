@@ -3,6 +3,7 @@
     xmlns:mvc="sap.ui.core.mvc"
     xmlns="sap.m"
     xmlns:mdc="sap.ui.mdc"
+    xmlns:core="sap.ui.core"
 >
     <VBox class="sapUiSmallMargin">
         <Toolbar>
@@ -21,20 +22,22 @@
                 text="Download Serials"
                 type="Emphasized"
                 press=".onDownloadSerials"
-                enabled="false"
+                enabled="{ui>/downloadEnabled}"
             />
             <Button
-                id="btnEdit"
-                text="Edit"
-                press=".onStartEdit"
-                enabled="false"
+                id="btnSave"
+                text="Save"
+                type="Emphasized"
+                press=".onSave"
+                enabled="{ui>/saveEnabled}"
+                busy="{ui>/busy}"
             />
             <Button
                 id="btnDelete"
                 text="Delete"
                 type="Reject"
                 press=".onDeleteRow"
-                enabled="false"
+                enabled="{ui>/deleteEnabled}"
             />
         </Toolbar>
 
@@ -93,9 +96,7 @@
         <Table
             id="physTable"
             mode="SingleSelectLeft"
-            growing="true"
-            growingScrollToLoad="true"
-            selectionChange=".onPhysSelect"
+            selectionChange=".onSelectionChange"
             items="{ path: '/PhysicalStock' }"
         >
             <columns>
@@ -135,14 +136,36 @@
                         <Input
                             width="100%"
                             value="{ path: 'batch', mode: 'sap.ui.model.BindingMode.OneTime' }"
-                        />
+                            liveChange=".onCellLiveChange"
+                        >
+                            <customData>
+                                <core:CustomData
+                                    key="field"
+                                    value="batch"
+                                />
+                            </customData>
+                        </Input>
 
                         <Input
                             type="Number"
                             textAlign="End"
                             width="100%"
-                            value="{ path: 'totalQuantity', mode: 'sap.ui.model.BindingMode.OneTime' }"
-                        />
+                            value="{
+                            path: 'quantity',
+                            mode: 'sap.ui.model.BindingMode.OneTime',
+                            type: 'sap.ui.model.odata.type.Decimal',
+                            constraints: { precision: 13, scale: 1 },
+                            formatOptions: { groupingEnabled: false, parseAsString: true }
+                        }"
+                            liveChange=".onCellLiveChange"
+                        >
+                            <customData>
+                                <core:CustomData
+                                    key="field"
+                                    value="quantity"
+                                />
+                            </customData>
+                        </Input>
 
                         <Text text="{uom}" />
                         <Text text="{topHU}" />

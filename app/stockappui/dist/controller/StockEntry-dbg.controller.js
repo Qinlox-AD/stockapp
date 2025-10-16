@@ -24,9 +24,16 @@ sap.ui.define([
         case "F1": this.onOpenTopHU(); break;
         case "F2": this.onOpenSerNb(); break;
         case "F6": this.onOpenList(); break;
-        case "F7": this.onBackUp(); break;
+        case "F7": this.onBackBtn(); break;
         case "Escape": this.onNavBack(); break;
       }
+    },
+
+    onBackBtn() {
+      const vm = this.getModelMain();
+      vm.setProperty("/__sub/packMatTopHu", "");
+      vm.setProperty("/__sub/topHu", "");
+      this.onBackUp()
     },
 
     onNavBack() {

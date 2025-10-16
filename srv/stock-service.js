@@ -15,8 +15,9 @@ module.exports = cds.service.impl(async function () {
   this.on('ScanSerial', scanSerial);
   this.on('ConfirmSerials', confirmSerials);
   this.on('ExportPhysicalStockExcel', exportPhysicalStockExcel);
+  this.on('EditStock', editStock);
+  this.before('DELETE', 'PhysicalStock', deleteSerialsForStock);
 
-  this.on('DELETE', PhysicalStock, deleteFromAggregation);
 
   function validatePhysicalStock(req) {
     try {
@@ -28,6 +29,130 @@ module.exports = cds.service.impl(async function () {
       return req.reject(400, `Validation failed: ${err.message}`);
     }
   }
+
+  async function editStock(req) {
+    const tx = cds.tx(req);
+    const { edits = [] } = req.data || {};
+
+    if (!Array.isArray(edits) || edits.length === 0) {
+      return []; // nothing to process, return silently
+    }
+
+    const results = [];
+    const seen = new Map(); // deduplicate by logical key
+
+    // normalize & deduplicate
+    for (const e of edits) {
+      const key = JSON.stringify({
+        warehouse: e.warehouse,
+        storageBin: e.storageBin,
+        topHU: e.topHU ?? null,
+        stockHU: e.stockHU ?? null,
+        product: e.product ?? null,
+        currentBatch: e.currentBatch ?? null,
+        uom: e.uom ?? null
+      });
+
+      seen.set(key, {
+        warehouse: e.warehouse,
+        storageBin: e.storageBin,
+        topHU: e.topHU ?? null,
+        stockHU: e.stockHU ?? null,
+        product: e.product ?? null,
+        currentBatch: e.currentBatch ?? null,
+        newBatch: (e.newBatch ?? e.currentBatch) ?? null,
+        uom: e.uom ?? null,
+        qty: Math.round(Number(e.newTotalQuantity || 0) * 1000) / 1000
+      });
+    }
+
+    // process deduplicated edits
+    for (const e of seen.values()) {
+      const keyFields = {
+        warehouse: e.warehouse,
+        storageBin: e.storageBin,
+        topHU: e.topHU,
+        stockHU: e.stockHU,
+        product: e.product,
+        uom: e.uom,
+        packMatTopHU: null,
+        packMatStockHU: null
+      };
+
+      let rows = await tx.run(
+        SELECT.from(PhysicalStock)
+          .columns('ID', 'quantity', 'batch')
+          .where({ ...keyFields, batch: e.currentBatch })
+          .orderBy({ ref: ['createdAt'], sort: 'asc' })
+          .forUpdate()
+      );
+
+      const count = rows.length;
+
+      // batch change
+      if (count && e.newBatch !== e.currentBatch) {
+        await Promise.all(
+          rows.map(r => tx.run(UPDATE(PhysicalStock, r.ID).set({ batch: e.newBatch })))
+        );
+        rows = rows.map(r => ({ ...r, batch: e.newBatch }));
+      }
+
+      // update or insert
+      if (count) {
+        const totalMilli = Math.round(e.qty * 1000);
+        const base = Math.floor(totalMilli / count);
+        const remainder = totalMilli - base * count;
+
+        for (let i = 0; i < count; i++) {
+          const milli = base + (i < remainder ? 1 : 0);
+          await tx.run(UPDATE(PhysicalStock, rows[i].ID).set({ quantity: milli / 1000 }));
+        }
+      } else {
+        await tx.run(
+          INSERT.into(PhysicalStock).entries({
+            ...keyFields,
+            batch: e.newBatch,
+            quantity: e.qty,
+            uom: e.uom
+          })
+        );
+      }
+
+      results.push({
+        warehouse: e.warehouse,
+        storageBin: e.storageBin,
+        topHU: e.topHU,
+        stockHU: e.stockHU,
+        product: e.product,
+        batch: e.newBatch,
+        uom: e.uom,
+        totalQuantity: e.qty
+      });
+    }
+
+    return results;
+  }
+
+
+  async function deleteSerialsForStock(req) {
+    const tx = cds.tx(req);
+
+    try {
+      const ids = req.data?.ID ? [req.data.ID] : [];
+
+      if (ids.length) {
+        await tx.run(
+          DELETE.from('inventory.SerialNumbers').where({ physicalStockId: { in: ids } })
+        );
+      }
+    } catch (err) {
+      console.error('Failed to delete serials for stock:', err);
+      return req.reject(500, `Failed to delete related serial numbers: ${err.message}`);
+    }
+  }
+
+
+
 
   async function confirmTopHU(req) {
     const tx = cds.tx(req);
@@ -105,7 +230,7 @@ module.exports = cds.service.impl(async function () {
       uom: e.uom ?? null
     };
 
-    if (key.stockHU && !key.batch && !key.product && !qty) {
+    if (key.stockHU) {
       const exists = await tx.run(
         SELECT.one.from(PhysicalStock).where`
         warehouse  = ${key.warehouse}
@@ -174,11 +299,6 @@ module.exports = cds.service.impl(async function () {
         ));
         addQty = toInsert.length;
       }
-    }
-
-    if (addQty > 0) {
-      const newHostQty = Number(host.quantity || 0) + addQty;
-      await tx.run(UPDATE(PhysicalStock, host.ID).set({ quantity: newHostQty }));
     }
 
     const aggKey = buildAggregationKey({
@@ -281,8 +401,6 @@ module.exports = cds.service.impl(async function () {
       return req.reject(400, `ConfirmSerials failed: ${err.message}`);
     }
   }
-
-
 
   async function exportPhysicalStockExcel(req) {
     const tx = cds.tx(req);
@@ -406,28 +524,4 @@ module.exports = cds.service.impl(async function () {
     return req.reject(409, MESSAGES[key](params));
   }
 
-  async function deleteFromAggregation(req) {
-    const data = req.data || {};
-    const xpr = [];
-
-    const pushEq = (field, val) => {
-      if (val !== undefined && val !== null && String(val) !== '') {
-        if (xpr.length) xpr.push('and');
-        xpr.push({ ref: [field] }, '=', { val: val });
-      }
-    };
-
-    pushEq('warehouse', data.warehouse);
-    pushEq('storageBin', data.storageBin);
-    pushEq('topHU', data.topHU);
-    pushEq('stockHU', data.stockHU);
-    pushEq('product', data.product);
-    pushEq('batch', data.batch);
-
-    if (!xpr.length) return req.reject(400, 'No identifying fields provided for delete');
-
-    const tx = cds.tx(req);
-    const n = await tx.run(DELETE.from(PhysicalStock).where(xpr));
-    return n || 0;
-  }
 });

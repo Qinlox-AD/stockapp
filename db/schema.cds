@@ -14,7 +14,7 @@ entity PhysicalStock : cuid, managed {
   packMatStockHU : String(40);
   product        : String(40);
   batch          : String(20);
-  quantity       : Decimal(13, 3);
+  quantity       : Decimal(13, 1);
   uom            : String(3);
 }
 
@@ -35,15 +35,12 @@ entity SerialNumbers : managed {
       storageBin      : String(20);
       product         : String(40);
 
-      // HU fields can stay nullable if that’s intended
       topHU           : String(30);
       stockHU         : String(30);
 }
 
-// --- Top HU registry, unique by business keys
 entity TopHURegistry : managed {
   key warehouse  : String(10);
-  key storageBin : String(20);
   key topHU      : String(30);
+      storageBin : String(20);
 }
-

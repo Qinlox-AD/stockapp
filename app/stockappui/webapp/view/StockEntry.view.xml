@@ -174,7 +174,7 @@
 
                 <Button
                     text="{i18n>backF7}"
-                    press="onBackUp"
+                    press="onBackBtn"
                 >
                     <layoutData>
                         <OverflowToolbarLayoutData
