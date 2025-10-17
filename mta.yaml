@@ -54,7 +54,6 @@ modules:
             - monitoringui.zip
           target-path: app/
 
-  # === Existing UI5 app ===
   - name: stockappui
     type: html5
     path: app/stockappui
@@ -66,7 +65,6 @@ modules:
       build-result: dist
       supported-platforms: []
 
-  # === New UI5 app: monitoringui ===
   - name: monitoringui
     type: html5
     path: app/monitoringui
