@@ -54,6 +54,7 @@ modules:
             - monitoringui.zip
           target-path: app/
 
+  # === UI module: Stock App (provider: stockapp) ===
   - name: stockappui
     type: html5
     path: app/stockappui
@@ -65,6 +66,7 @@ modules:
       build-result: dist
       supported-platforms: []
 
+  # === UI module: Monitoring App (provider: monitoringapp) ===
   - name: monitoringui
     type: html5
     path: app/monitoringui
@@ -76,7 +78,7 @@ modules:
       build-result: dist
       supported-platforms: []
 
-  # === Destination Content (Work Zone / MAR) ===
+  # === Destination Content (HTML5 providers + UAA for both) ===
   - name: stockapp_backend-destination-content
     type: com.sap.application.content
     requires:
@@ -95,6 +97,7 @@ modules:
       content:
         instance:
           destinations:
+            # ---- Provider: stockapp (for stockappui) ----
             - Name: stockapp_html_repo_host
               ServiceInstanceName: stockapp_backend-html5-repo-host
               ServiceKeyName: stockapp_backend-repo-host-key
@@ -104,6 +107,18 @@ modules:
               ServiceInstanceName: stockapp_backend-xsuaa
               ServiceKeyName: stockapp_backend-xsuaa-key
               sap.cloud.service: stockapp
+
+            # ---- Provider: monitoringapp (for monitoringui) ----
+            - Name: monitoring_html_repo_host
+              ServiceInstanceName: stockapp_backend-html5-repo-host
+              ServiceKeyName: stockapp_backend-repo-host-key
+              sap.cloud.service: monitoringapp
+            - Name: monitoring_uaa
+              Authentication: OAuth2UserTokenExchange
+              ServiceInstanceName: stockapp_backend-xsuaa
+              ServiceKeyName: stockapp_backend-xsuaa-key
+              sap.cloud.service: monitoringapp
+
           existing_destinations_policy: update
     build-parameters:
       no-source: true
@@ -116,7 +131,7 @@ resources:
       service: hana
       service-plan: hdi-shared
 
-  # === Destination service ===
+  # === Destination service (shared) ===
   - name: stockapp_backend-destination
     type: org.cloudfoundry.managed-service
     requires:
@@ -156,7 +171,7 @@ resources:
       service: html5-apps-repo
       service-plan: app-runtime
 
-  # === XSUAA ===
+  # === XSUAA (shared by both apps) ===
   - name: stockapp_backend-xsuaa
     type: org.cloudfoundry.managed-service
     parameters:
@@ -173,5 +188,5 @@ build-parameters:
   before-all:
     - builder: custom
       commands:
-        - npm ci
+        - npm ci --no-audit --no-fund
         - npx cds build --production
