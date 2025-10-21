@@ -20,8 +20,6 @@ sap.ui.define(
                 return this.getView().getModel("i18n").getResourceBundle().getText(key);
             },
 
-
-
             showBusyIndicator() {
                 sap.ui.core.BusyIndicator.show(0);
             },

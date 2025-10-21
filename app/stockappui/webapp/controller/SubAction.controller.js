@@ -17,11 +17,19 @@ sap.ui.define([
 
 
     async onRouteMatched(oEvt) {
-      const { mode } = oEvt.getParameter("arguments");
+      const { mode } = oEvt.getParameter("arguments") || {};
       const vm = this.getModelMain();
       vm.setProperty("/__sub/mode", mode);
+
       if (mode === "List") {
-        await this._loadBinList(vm.getProperty("/warehouse"), vm.getProperty("/bin"));
+        const warehouse = vm.getProperty("/warehouse");
+        const bin = vm.getProperty("/bin");
+
+        if (!warehouse || !bin) {
+          vm.setProperty("/list", []);
+          return;
+        }
+        await this._loadBinList(warehouse, bin);
       }
     },
 
@@ -102,13 +110,17 @@ sap.ui.define([
     },
 
     async _loadBinList(warehouse, storageBin) {
-      const m = this.getOwnerComponent().getModel(); // OData V4
-      const ctx = m.bindContext("/ExportBin(...)");
-      ctx.setParameter("warehouse", warehouse);
-      ctx.setParameter("storageBin", storageBin);
-      await ctx.execute();
-      const data = ctx.getBoundContext().getObject(); // array
-      this.getModelMain().setProperty("/list", data?.value || []);
+      this.showBusyIndicator();
+
+      try {
+        const data = await this.callAction("ExportBin", { warehouse, storageBin });
+        this.getModelMain().setProperty("/list", data?.value ?? []);
+      } catch (err) {
+        this.getModelMain().setProperty("/list", []);
+        sap.m.MessageBox.error(err?.message || "Failed to load storage bins");
+      } finally {
+        this.hideBusyIndicator();
+      }
     },
   });
 });

@@ -1,14 +1,16 @@
 // srv/stock-service.js
 const cds = require('@sap/cds');
 const ExcelJS = require('exceljs');
-
 const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 
 module.exports = cds.service.impl(async function () {
   const { PhysicalStock, SerialNumbers, TopHURegistry } = this.entities;
 
+  // Hooks
   this.before('CREATE', PhysicalStock, validatePhysicalStock);
+  this.before('DELETE', 'PhysicalStock', deleteSerialsForStock);
 
+  // Actions
   this.on('ConfirmTopHU', confirmTopHU);
   this.on('ConfirmStock', confirmStock);
   this.on('ConfirmStockWithSerials', confirmStockWithSerials);
@@ -16,17 +18,21 @@ module.exports = cds.service.impl(async function () {
   this.on('ConfirmSerials', confirmSerials);
   this.on('ExportPhysicalStockExcel', exportPhysicalStockExcel);
   this.on('EditStock', editStock);
-  this.before('DELETE', 'PhysicalStock', deleteSerialsForStock);
+  this.on('ExportBin', exportBin);
 
-
-  function validatePhysicalStock(req) {
+  // ===== Actions =====
+  async function exportBin(req) {
+    const tx = cds.tx(req);
     try {
-      const { product, quantity } = req.data;
-      if (product && quantity == null) return req.reject(400, 'Quantity is required when Product is provided');
-      if (quantity != null && isNaN(Number(quantity))) return req.reject(400, 'Quantity must be numeric');
-      if (!product && quantity != null) return req.reject(400, 'Product is required when Quantity is provided');
+      const { warehouse, storageBin } = req.data;
+      const rows = await tx.run(
+        SELECT.from(PhysicalStock)
+          .where({ warehouse, storageBin })
+          .orderBy('topHU', 'stockHU', 'product')
+      );
+      return rows;
     } catch (err) {
-      return req.reject(400, `Validation failed: ${err.message}`);
+      return req.reject(400, `ExportBin failed: ${err.message}`);
     }
   }
 
@@ -35,13 +41,12 @@ module.exports = cds.service.impl(async function () {
     const { edits = [] } = req.data || {};
 
     if (!Array.isArray(edits) || edits.length === 0) {
-      return []; // nothing to process, return silently
+      return [];
     }
 
     const results = [];
-    const seen = new Map(); // deduplicate by logical key
+    const seen = new Map();
 
-    // normalize & deduplicate
     for (const e of edits) {
       const key = JSON.stringify({
         warehouse: e.warehouse,
@@ -66,7 +71,6 @@ module.exports = cds.service.impl(async function () {
       });
     }
 
-    // process deduplicated edits
     for (const e of seen.values()) {
       const keyFields = {
         warehouse: e.warehouse,
@@ -89,7 +93,6 @@ module.exports = cds.service.impl(async function () {
 
       const count = rows.length;
 
-      // batch change
       if (count && e.newBatch !== e.currentBatch) {
         await Promise.all(
           rows.map(r => tx.run(UPDATE(PhysicalStock, r.ID).set({ batch: e.newBatch })))
@@ -97,7 +100,6 @@ module.exports = cds.service.impl(async function () {
         rows = rows.map(r => ({ ...r, batch: e.newBatch }));
       }
 
-      // update or insert
       if (count) {
         const totalMilli = Math.round(e.qty * 1000);
         const base = Math.floor(totalMilli / count);
@@ -132,27 +134,6 @@ module.exports = cds.service.impl(async function () {
 
     return results;
   }
-
-
-  async function deleteSerialsForStock(req) {
-    const tx = cds.tx(req);
-
-    try {
-      const ids = req.data?.ID ? [req.data.ID] : [];
-
-      if (ids.length) {
-        await tx.run(
-          DELETE.from('inventory.SerialNumbers').where({ physicalStockId: { in: ids } })
-        );
-      }
-    } catch (err) {
-      console.error('Failed to delete serials for stock:', err);
-      return req.reject(500, `Failed to delete related serial numbers: ${err.message}`);
-    }
-  }
-
-
-
 
   async function confirmTopHU(req) {
     const tx = cds.tx(req);
@@ -195,20 +176,6 @@ module.exports = cds.service.impl(async function () {
     } catch (err) {
       return req.reject(400, `ConfirmTopHU failed: ${err.message}`);
     }
-  }
-
-  function buildAggregationKey(src) {
-    return {
-      warehouse: src.warehouse ?? null,
-      storageBin: src.storageBin ?? null,
-      topHU: src.topHU ?? null,
-      packMatTopHU: src.packMatTopHU ?? null,
-      stockHU: src.stockHU ?? null,
-      packMatStockHU: src.packMatStockHU ?? null,
-      product: src.product ?? null,
-      batch: src.batch ?? null,
-      uom: src.uom ?? null
-    };
   }
 
   async function confirmStock(req) {
@@ -313,8 +280,6 @@ module.exports = cds.service.impl(async function () {
 
     return { ID, ...aggKey, quantity: rowQuantity, totalQuantity };
   }
-
-
 
   async function scanSerial(req) {
     const tx = cds.tx(req);
@@ -432,7 +397,7 @@ module.exports = cds.service.impl(async function () {
         { header: 'PackMat Stock HU', key: 'packMatStockHU', width: 20 },
         { header: 'Product', key: 'product', width: 20 },
         { header: 'Batch', key: 'batch', width: 12 },
-        { header: 'Quantity', key: 'totalQuantity', width: 10 },
+        { header: 'Quantity', key: 'quantity', width: 10 },
         { header: 'UoM', key: 'uom', width: 8 },
       ];
       ws1.addRows(stockRows);
@@ -460,6 +425,32 @@ module.exports = cds.service.impl(async function () {
     }
   }
 
+  // ===== Helpers =====
+  function validatePhysicalStock(req) {
+    try {
+      const { product, quantity } = req.data;
+      if (product && quantity == null) return req.reject(400, 'Quantity is required when Product is provided');
+      if (quantity != null && isNaN(Number(quantity))) return req.reject(400, 'Quantity must be numeric');
+      if (!product && quantity != null) return req.reject(400, 'Product is required when Quantity is provided');
+    } catch (err) {
+      return req.reject(400, `Validation failed: ${err.message}`);
+    }
+  }
+
+  function buildAggregationKey(src) {
+    return {
+      warehouse: src.warehouse ?? null,
+      storageBin: src.storageBin ?? null,
+      topHU: src.topHU ?? null,
+      packMatTopHU: src.packMatTopHU ?? null,
+      stockHU: src.stockHU ?? null,
+      packMatStockHU: src.packMatStockHU ?? null,
+      product: src.product ?? null,
+      batch: src.batch ?? null,
+      uom: src.uom ?? null
+    };
+  }
+
   async function upsertAddByKey(tx, PhysicalStock, key, addQty) {
     const existing = await tx.run(
       SELECT.one.from(PhysicalStock)
@@ -485,6 +476,20 @@ module.exports = cds.service.impl(async function () {
     return { id: ID, rowQuantity: initQty, totalQuantity: initQty };
   }
 
+  async function deleteSerialsForStock(req) {
+    const tx = cds.tx(req);
+    try {
+      const ids = req.data?.ID ? [req.data.ID] : [];
+      if (ids.length) {
+        await tx.run(
+          DELETE.from('inventory.SerialNumbers').where({ physicalStockId: { in: ids } })
+        );
+      }
+    } catch (err) {
+      console.error('Failed to delete serials for stock:', err);
+      return req.reject(500, `Failed to delete related serial numbers: ${err.message}`);
+    }
+  }
 
   const MESSAGES = {
     SN_PER_LOC_PROD: p =>
@@ -523,5 +528,4 @@ module.exports = cds.service.impl(async function () {
 
     return req.reject(409, MESSAGES[key](params));
   }
-
 });

@@ -35,7 +35,7 @@
                     />
 
                     <Label
-                        text="{i18n>PackMat}"
+                        text="{i18n>packMat}"
                         class="sapUiSmallMarginEnd"
                     />
                     <Input
