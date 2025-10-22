@@ -198,18 +198,11 @@ module.exports = cds.service.impl(async function () {
     };
 
     if (key.stockHU) {
-      const exists = await tx.run(
-        SELECT.one.from(PhysicalStock).where`
-        warehouse  = ${key.warehouse}
-        and stockHU = ${key.stockHU}
-        and storageBin <> ${key.storageBin}
-      `
-      );
-      if (exists) return req.reject(409, `Duplicate Stock HU ${key.stockHU} already exists for warehouse ${key.warehouse}.`);
+      await validateDuplicateStockHU(req, tx, key);
     }
 
     const { id: ID, rowQuantity, totalQuantity } =
-      await upsertAddByKey(tx, PhysicalStock, key, qty);
+      await addToStockByKey(tx, PhysicalStock, key, qty);
 
     return { ID, ...key, quantity: rowQuantity, totalQuantity };
   }
@@ -221,7 +214,7 @@ module.exports = cds.service.impl(async function () {
     const { entry = {}, serials = [] } = req.data || {};
     const {
       warehouse, storageBin, topHU = null, stockHU = null,
-      product = null, batch = null, uom = null
+      product = null, batch = null, quantity = 0, uom = null
     } = entry;
 
     if (!warehouse || !storageBin) return req.reject(400, 'warehouse & storageBin required');
@@ -231,19 +224,16 @@ module.exports = cds.service.impl(async function () {
     let host = await tx.run(SELECT.one.from(PhysicalStock).where(hostKey).forUpdate());
     if (!host) {
       if (stockHU) {
-        const dup = await tx.run(
-          SELECT.one.from(PhysicalStock).where`
-          warehouse  = ${warehouse}
-          and stockHU = ${stockHU}
-          and storageBin <> ${storageBin}
-        `
-        );
-        if (dup) return req.reject(409, `Duplicate Stock HU ${stockHU} already exists for warehouse ${warehouse}.`);
+        await validateDuplicateStockHU(req, tx, { warehouse, storageBin, stockHU, product, quantity, batch });
       }
+
       const ID = cds.utils.uuid();
-      await tx.run(INSERT.into(PhysicalStock).entries({ ID, ...hostKey, batch, uom, quantity: 0 }));
+      await tx.run(
+        INSERT.into(PhysicalStock).entries({ ID, ...hostKey, batch, uom, quantity: 0 })
+      );
       host = { ID, ...hostKey, batch, uom, quantity: 0 };
     }
+
 
     const normalized = [...new Set((serials || []).map(s => String(s).trim().toUpperCase()).filter(Boolean))];
 
@@ -276,7 +266,7 @@ module.exports = cds.service.impl(async function () {
     });
 
     const { id: ID, rowQuantity, totalQuantity } =
-      await upsertAddByKey(tx, PhysicalStock, aggKey, addQty);
+      await addToStockByKey(tx, PhysicalStock, aggKey, addQty);
 
     return { ID, ...aggKey, quantity: rowQuantity, totalQuantity };
   }
@@ -437,6 +427,47 @@ module.exports = cds.service.impl(async function () {
     }
   }
 
+  async function validateDuplicateStockHU(req, tx, {
+    warehouse,
+    storageBin,
+    stockHU,
+    product,
+    quantity,
+    batch
+  }) {
+    const existing = await tx.run(
+      SELECT.one.from(PhysicalStock)
+        .columns('storageBin', 'product', 'quantity', 'batch')
+        .where({ warehouse, stockHU })
+    );
+
+    if (!existing) return;
+
+    const sameBin = existing.storageBin === storageBin;
+
+    // Case 1: HU exists in another bin → original unchanged message
+    if (!sameBin) {
+      return req.reject(
+        409,
+        `Duplicate Stock HU ${stockHU} already exists for warehouse ${warehouse}.`
+      );
+    }
+
+    // Case 2: same bin but existing entry is non-empty, and current payload is empty
+    const hasData =
+      existing.product != null ||
+      (existing.quantity != null && Number(existing.quantity) !== 0) ||
+      existing.batch != null;
+
+    if (!product && !quantity && !batch && hasData) {
+      return req.reject(
+        409,
+        `Cannot create empty Stock HU "${stockHU}" in warehouse ${warehouse}, bin ${storageBin} because a non-empty stock entry already exists.`
+      );
+    }
+  }
+
+
   function buildAggregationKey(src) {
     return {
       warehouse: src.warehouse ?? null,
@@ -451,7 +482,7 @@ module.exports = cds.service.impl(async function () {
     };
   }
 
-  async function upsertAddByKey(tx, PhysicalStock, key, addQty) {
+  async function addToStockByKey(tx, PhysicalStock, key, addQty) {
     const existing = await tx.run(
       SELECT.one.from(PhysicalStock)
         .columns('ID', 'quantity')
@@ -479,17 +510,47 @@ module.exports = cds.service.impl(async function () {
   async function deleteSerialsForStock(req) {
     const tx = cds.tx(req);
     try {
-      const ids = req.data?.ID ? [req.data.ID] : [];
-      if (ids.length) {
-        await tx.run(
-          DELETE.from('inventory.SerialNumbers').where({ physicalStockId: { in: ids } })
-        );
+      const ID = req.data?.ID;
+
+      await tx.run(
+        DELETE.from('inventory.SerialNumbers').where({ physicalStockId: ID })
+      );
+
+      const host = await tx.run(
+        SELECT.one.from(PhysicalStock)
+          .columns('warehouse', 'storageBin', 'topHU')
+          .where({ ID })
+      );
+
+      // If a Top HU is set, delete it only if this is the last stock for that (wh/bin/topHU)
+      if (host?.topHU) {
+        const { count } = await tx.run(
+          SELECT.one`count(*) as count`
+            .from(PhysicalStock)
+            .where({
+              warehouse: host.warehouse,
+              storageBin: host.storageBin,
+              topHU: host.topHU,
+              ID: { '<>': ID }
+            })
+        ) || { count: 0 };
+
+        if (Number(count) === 0) {
+          await tx.run(
+            DELETE.from(TopHURegistry).where({
+              warehouse: host.warehouse,
+              storageBin: host.storageBin,
+              topHU: host.topHU
+            })
+          );
+        }
       }
     } catch (err) {
-      console.error('Failed to delete serials for stock:', err);
-      return req.reject(500, `Failed to delete related serial numbers: ${err.message}`);
+      console.error('Failed to delete serials/top HU for stock:', err);
+      return req.reject(500, `Failed to cleanup related data: ${err.message}`);
     }
   }
+
 
   const MESSAGES = {
     SN_PER_LOC_PROD: p =>
