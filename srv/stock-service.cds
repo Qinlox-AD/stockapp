@@ -41,10 +41,10 @@ type ScanSerialsResult   : {
 service StockService @(path: '/rf') {
 
     @cds.redirection.target
-    entity PhysicalStock as projection on inventory.PhysicalStock;
+    entity PhysicalStock   as projection on inventory.PhysicalStock;
 
-    entity SerialNumbers as projection on inventory.SerialNumbers;
-    entity TopHURegistry as projection on inventory.TopHURegistry;
+    entity SerialNumbers   as projection on inventory.SerialNumbers;
+    entity TopHURegistry   as projection on inventory.TopHURegistry;
 
     action ConfirmTopHU(input: TopHUInput)                                                  returns PhysicalStockResult;
     action ConfirmStock(entry: PhysicalStockInput)                                          returns PhysicalStockResult;
@@ -56,6 +56,7 @@ service StockService @(path: '/rf') {
     action ConfirmStockWithSerials(entry: PhysicalStockInput, serials: array of String(40)) returns ScanSerialsResult;
 
     action ExportBin(warehouse: String(10), storageBin: String(20))                         returns many PhysicalStock;
+    action UploadValidationStock(file: LargeBinary)                                         returns String;
 
     action ExportPhysicalStockExcel(warehouse: String(10), storageBin: String(20))          returns LargeBinary;
 

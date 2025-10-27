@@ -18,8 +18,7 @@
   },
   "scripts": {
     "start": "cds-serve",
-    "watch-stoackapp-ui": "cds watch --open monitoring/index.html?sap-ui-xx-viewCache=false",
-    "watch-monitoring-ui": "cds watch --open stockappui/index.html?sap-ui-xx-viewCache=false",
+    "watch-stoackapp-ui": "cds watch --open stoackapp/index.html?sap-ui-xx-viewCache=false",
     "watch:noopen": "cds watch --in-memory false",
     "db:deploy": "cds deploy --to sqlite:db/dev.db",
     "db:reset": "rimraf db/dev.db && npm run db:deploy",

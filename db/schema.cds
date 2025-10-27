@@ -19,6 +19,14 @@ entity PhysicalStock : cuid, managed {
 }
 
 
+entity ValidationStock : managed {
+  key warehouse    : String(10);
+  key product      : String(40);
+  key batch        : String(20);
+      batchManaged : Boolean default false;
+}
+
+
 @assert.unique: {sn_per_loc_prod: [
   warehouse,
   product,

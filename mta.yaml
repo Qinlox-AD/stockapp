@@ -33,7 +33,7 @@ modules:
     parameters:
       buildpack: nodejs_buildpack
 
-  # === UI5 content deployer to HTML5 App Repo ===
+  # === UI5 content deployer ===
   - name: stockapp_backend-app-deployer
     type: com.sap.application.content
     path: gen
@@ -53,8 +53,12 @@ modules:
           artifacts:
             - monitoringui.zip
           target-path: app/
+        - name: uploadappui
+          artifacts:
+            - uploadappui.zip
+          target-path: app/
 
-  # === UI module: Stock App (provider: stockapp) ===
+  # === UI module: Stock App ===
   - name: stockappui
     type: html5
     path: app/stockappui
@@ -66,7 +70,7 @@ modules:
       build-result: dist
       supported-platforms: []
 
-  # === UI module: Monitoring App (provider: monitoringapp) ===
+  # === UI module: Monitoring App ===
   - name: monitoringui
     type: html5
     path: app/monitoringui
@@ -78,7 +82,19 @@ modules:
       build-result: dist
       supported-platforms: []
 
-  # === Destination Content (HTML5 providers + UAA for both) ===
+  # === UI module: Upload App ===
+  - name: uploadappui
+    type: html5
+    path: app/uploadappui
+    build-parameters:
+      builder: custom
+      commands:
+        - npm install
+        - npm run build:cf
+      build-result: dist
+      supported-platforms: []
+
+  # === Destination Content (HTML5 providers + UAA for all apps) ===
   - name: stockapp_backend-destination-content
     type: com.sap.application.content
     requires:
@@ -97,7 +113,7 @@ modules:
       content:
         instance:
           destinations:
-            # ---- Provider: stockapp (for stockappui) ----
+            # ---- Provider: stockapp ----
             - Name: stockapp_html_repo_host
               ServiceInstanceName: stockapp_backend-html5-repo-host
               ServiceKeyName: stockapp_backend-repo-host-key
@@ -108,7 +124,7 @@ modules:
               ServiceKeyName: stockapp_backend-xsuaa-key
               sap.cloud.service: stockapp
 
-            # ---- Provider: monitoringapp (for monitoringui) ----
+            # ---- Provider: monitoringapp ----
             - Name: monitoring_html_repo_host
               ServiceInstanceName: stockapp_backend-html5-repo-host
               ServiceKeyName: stockapp_backend-repo-host-key
@@ -118,6 +134,17 @@ modules:
               ServiceInstanceName: stockapp_backend-xsuaa
               ServiceKeyName: stockapp_backend-xsuaa-key
               sap.cloud.service: monitoringapp
+
+            # ---- Provider: uploadapp ----
+            - Name: upload_html_repo_host
+              ServiceInstanceName: stockapp_backend-html5-repo-host
+              ServiceKeyName: stockapp_backend-repo-host-key
+              sap.cloud.service: uploadapp
+            - Name: upload_uaa
+              Authentication: OAuth2UserTokenExchange
+              ServiceInstanceName: stockapp_backend-xsuaa
+              ServiceKeyName: stockapp_backend-xsuaa-key
+              sap.cloud.service: uploadapp
 
           existing_destinations_policy: update
     build-parameters:
@@ -131,7 +158,7 @@ resources:
       service: hana
       service-plan: hdi-shared
 
-  # === Destination service (shared) ===
+  # === Destination service ===
   - name: stockapp_backend-destination
     type: org.cloudfoundry.managed-service
     requires:
@@ -157,21 +184,20 @@ resources:
                 HTML5.DynamicDestination: true
                 URL: ~{srv-api/srv-url}
 
-  # === HTML5 Apps Repo host ===
+  # === HTML5 Repo host/runtime ===
   - name: stockapp_backend-html5-repo-host
     type: org.cloudfoundry.managed-service
     parameters:
       service: html5-apps-repo
       service-plan: app-host
 
-  # === HTML5 Apps Repo runtime ===
   - name: stockapp_backend-html5-repo-rt
     type: org.cloudfoundry.managed-service
     parameters:
       service: html5-apps-repo
       service-plan: app-runtime
 
-  # === XSUAA (shared by both apps) ===
+  # === XSUAA ===
   - name: stockapp_backend-xsuaa
     type: org.cloudfoundry.managed-service
     parameters:

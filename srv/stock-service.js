@@ -5,6 +5,7 @@ const { SELECT, INSERT, UPDATE, DELETE } = cds.ql;
 
 module.exports = cds.service.impl(async function () {
   const { PhysicalStock, SerialNumbers, TopHURegistry } = this.entities;
+  const { ValidationStock } = cds.entities;
 
   // Hooks
   this.before('CREATE', PhysicalStock, validatePhysicalStock);
@@ -19,6 +20,7 @@ module.exports = cds.service.impl(async function () {
   this.on('ExportPhysicalStockExcel', exportPhysicalStockExcel);
   this.on('EditStock', editStock);
   this.on('ExportBin', exportBin);
+  this.on("UploadValidationStock", uploadValidationStock);
 
   // ===== Actions =====
   async function exportBin(req) {
@@ -33,6 +35,74 @@ module.exports = cds.service.impl(async function () {
       return rows;
     } catch (err) {
       return req.reject(400, `ExportBin failed: ${err.message}`);
+    }
+  }
+
+  async function uploadValidationStock(req) {
+    const tx = cds.tx(req);
+
+    try {
+      const { file: decodedFile } = req.data;
+      if (!decodedFile) return req.reject(400, "No Excel file provided.");
+
+      // Decode the base64 Excel file into a Buffer
+      const fileBuffer = Buffer.from(decodedFile, "base64");
+
+      // Load workbook and the first sheet
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(fileBuffer);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) return req.reject(400, "No sheet found in Excel file.");
+
+      // Find headers anywhere in the first row
+      const headers = {};
+      sheet.getRow(1).eachCell((cell, col) => {
+        const h = String(cell.value || "").trim().toLowerCase();
+        if (/^warehouse/.test(h)) headers.warehouse = col;
+        else if (/^product/.test(h)) headers.product = col;
+        else if (/^batch$/i.test(h)) headers.batch = col;
+        else if (/batch\s*managed/i.test(h)) headers.batchManaged = col;
+      });
+
+      if (!headers.warehouse || !headers.product) {
+        return req.reject(400, "Missing required headers: Warehouse or Product.");
+      }
+
+      // Start reading actual data rows after header
+      const DATA_START_ROW = 2;
+      const seen = new Set();
+      const entries = [];
+
+      for (let i = DATA_START_ROW; i <= sheet.rowCount; i++) {
+        const row = sheet.getRow(i);
+
+        const warehouse = String(row.getCell(headers.warehouse).value || "").trim();
+        const product = String(row.getCell(headers.product).value || "").trim();
+        const batch = headers.batch ? String(row.getCell(headers.batch).value || "").trim() : "";
+        const rawFlag = headers.batchManaged ? String(row.getCell(headers.batchManaged).value || "").trim() : "";
+        const batchManaged = !!rawFlag; // true if cell not empty
+
+        // Validation rules
+        if (!warehouse || !product) continue;
+        if (batch && !batchManaged) continue;
+
+        const key = `${warehouse}|${product}|${batch}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        entries.push({ warehouse, product, batch, batchManaged });
+      }
+
+      if (!entries.length) return req.reject(400, "No valid rows found in Excel file.");
+
+      // Replace all existing records with new ones
+      await tx.run(DELETE.from(ValidationStock));
+      await tx.run(INSERT.into(ValidationStock).entries(entries));
+
+      return `Uploaded ${entries.length} validation records successfully.`;
+    } catch (err) {
+      console.error("UploadValidationStock failed:", err);
+      return req.reject(500, `Upload failed: ${err.message}`);
     }
   }
 
@@ -197,6 +267,12 @@ module.exports = cds.service.impl(async function () {
       uom: e.uom ?? null
     };
 
+    await validateStockRule(req, tx, {
+      warehouse: key.warehouse,
+      product: key.product,
+      batch: key.batch
+    });
+
     if (key.stockHU) {
       await validateDuplicateStockHU(req, tx, key);
     }
@@ -219,6 +295,14 @@ module.exports = cds.service.impl(async function () {
 
     if (!warehouse || !storageBin) return req.reject(400, 'warehouse & storageBin required');
     if (serials.length && !product) return req.reject(400, 'Product is required when confirming serials');
+
+
+    await validateStockRule(req, tx, {
+      warehouse,
+      product,
+      batch
+    });
+
 
     const hostKey = { warehouse, storageBin, topHU, stockHU, product };
     let host = await tx.run(SELECT.one.from(PhysicalStock).where(hostKey).forUpdate());
@@ -247,14 +331,22 @@ module.exports = cds.service.impl(async function () {
       const existingSet = new Set(existing.map(r => r.serialNumber));
       const toInsert = normalized.filter(sn => !existingSet.has(sn));
       if (toInsert.length) {
-        await tx.run(INSERT.into(SerialNumbers).entries(
-          toInsert.map(sn => ({
-            physicalStockId: host.ID,
-            warehouse, storageBin, topHU, stockHU, product,
-            serialNumber: sn
-          }))
-        ));
-        addQty = toInsert.length;
+        try {
+          await tx.run(
+            INSERT.into(SerialNumbers).entries(
+              toInsert.map(sn => ({
+                physicalStockId: host.ID,
+                warehouse, storageBin, topHU, stockHU, product,
+                serialNumber: sn
+              }))
+            )
+          );
+          addQty = toInsert.length;
+        } catch (err) {
+          const handled = _buildDuplicateConstraintMessage(err, req, { warehouse });
+          if (handled) return handled;
+          throw err;
+        }
       }
     }
 
@@ -390,6 +482,9 @@ module.exports = cds.service.impl(async function () {
         { header: 'Quantity', key: 'quantity', width: 10 },
         { header: 'UoM', key: 'uom', width: 8 },
       ];
+      for (const row of stockRows) {
+        if (Number(row.quantity) === 0) row.quantity = '';
+      }
       ws1.addRows(stockRows);
 
       const ws2 = wb.addWorksheet('SerialNumbers');
@@ -426,6 +521,40 @@ module.exports = cds.service.impl(async function () {
       return req.reject(400, `Validation failed: ${err.message}`);
     }
   }
+
+  async function validateStockRule(req, tx, { warehouse, product, batch } = {}) {
+    if (!warehouse) return req.reject(400, "Warehouse is required.");
+    if (!product) return true;
+
+    const whRules = await tx.run(SELECT.from(ValidationStock).where({ warehouse }));
+    if (!whRules.length) return true;
+    const prodRules = whRules.filter(r => r.product === product);
+
+    // Product not listed → not allowed
+    if (!prodRules.length) {
+      return req.reject(422, `Product '${product}' is not allowed in warehouse '${warehouse}'.`);
+    }
+
+    // Determine if this product is batch-managed in this warehouse
+    const isBatchManaged = prodRules.some(r => r.batchManaged === true);
+
+    // If batch-managed and only product was provided → require batch
+    if (isBatchManaged && !batch) {
+      return req.reject(422, `Batch is required for product '${product}' in warehouse '${warehouse}'.`);
+    }
+
+    // If batch-managed and batch was provided → require exact (product,batch) entry
+    if (isBatchManaged && batch) {
+      const exact = prodRules.some(r => (r.batch || "") === batch);
+      if (!exact) {
+        return req.reject(422, `Batch '${batch}' for product '${product}' is not allowed in warehouse '${warehouse}'.`);
+      }
+    }
+
+    // Non-batch-managed: product being listed is enough; batch (if provided) is ignored here
+    return true;
+  }
+
 
   async function validateDuplicateStockHU(req, tx, {
     warehouse,
@@ -550,7 +679,6 @@ module.exports = cds.service.impl(async function () {
       return req.reject(500, `Failed to cleanup related data: ${err.message}`);
     }
   }
-
 
   const MESSAGES = {
     SN_PER_LOC_PROD: p =>

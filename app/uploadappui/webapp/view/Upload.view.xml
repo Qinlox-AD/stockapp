@@ -1,0 +1,37 @@
+<mvc:View controllerName="uploadapp.controller.Upload"
+  xmlns:mvc="sap.ui.core.mvc"
+  xmlns="sap.m"
+  xmlns:u="sap.ui.unified" displayBlock="true">
+
+  <Page id="UploadPage" title="File Transfer" titleAlignment="Center">
+    <content>
+      <VBox justifyContent="Center" alignItems="Center" width="100%" height="100%" class="sapUiLargeMargin">
+        <HBox justifyContent="Center" alignItems="Start" width="auto" class="sapUiMediumMargin">
+
+          <VBox alignItems="Center" class="sapUiMediumMarginEnd">
+            <u:FileUploader
+              id="fileUploader"
+              name="file"
+              useMultipart="false"
+              sameFilenameAllowed="true"
+              multiple="false"
+              fileType="xlsx"
+              placeholder="Choose a file..."
+              change="handleValueChange"
+              typeMissmatch="handleTypeMissmatch"
+              uploadComplete="handleUploadComplete"
+              width="15rem"
+              class="sapUiTinyMarginBottom"/>
+            <Button text="Upload" type="Emphasized" icon="sap-icon://upload" press="handleUploadPress" class="largeButton"/>
+          </VBox>
+
+          <VBox alignItems="Center">
+            <Input id="inpWarehouse" value="{vm>/warehouse}" placeholder="Warehouse number" width="12rem" class="sapUiTinyMarginBottom"/>
+            <Button text="Download" icon="sap-icon://download" press="onDownloadPress" class="largeButton"/>
+          </VBox>
+
+        </HBox>
+      </VBox>
+    </content>
+  </Page>
+</mvc:View>

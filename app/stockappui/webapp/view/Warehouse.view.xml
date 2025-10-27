@@ -17,8 +17,6 @@
     </content>
     <footer>
       <Toolbar>
-        <Button text="{i18n>exportToExcel}" icon="sap-icon://excel-attachment" press="onExportExcel"/>
-        <ToolbarSpacer/>
         <Button text="{i18n>enter}" type="Emphasized" press="onWarehouseEnter"/>
       </Toolbar>
     </footer>
