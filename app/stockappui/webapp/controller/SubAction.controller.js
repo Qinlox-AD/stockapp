@@ -56,13 +56,16 @@ sap.ui.define([
         bin: encodeURIComponent(vm.getProperty("/bin") || "")
       });
     },
-
+    
     // === ConfirmTopHU backend action F4 ===
     onConfirmTopHu: async function () {
       const vm = this.getModelMain();
       const hu = (vm.getProperty("/__sub/topHu") || "").trim();
       const packMatTopHU = (vm.getProperty("/__sub/packMatTopHu") || "").trim();
       if (!hu) { MessageBox.error(this.getI18nText("scanTopHU")); return; }
+
+      vm.setProperty("/confirmed/topHu", hu);
+      vm.setProperty("/confirmed/packMatTopHu", packMatTopHU);
 
       const input = {
         warehouse: vm.getProperty("/warehouse"),

@@ -33,6 +33,8 @@ sap.ui.define([
       const vm = this.getModelMain();
       vm.setProperty("/__sub/packMatTopHu", "");
       vm.setProperty("/__sub/topHu", "");
+      vm.setProperty("/confirmed/packMatTopHu", "");
+      vm.setProperty("/confirmed/topHu", "");
       this.onBackUp()
     },
 

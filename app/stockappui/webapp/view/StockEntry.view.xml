@@ -40,14 +40,14 @@
                 </form:SimpleForm>
 
                 <!-- Saved Top HU (shown after confirming in SubAction) -->
-                <HBox class="sapUiSmallMarginTop" alignItems="Center" justifyContent="SpaceBetween" renderType="Bare" visible="{= !!${vm>/__sub/topHu} }">
+                <HBox class="sapUiSmallMarginTop" alignItems="Center" justifyContent="SpaceBetween" renderType="Bare" visible="{= !!${vm>/confirmed/topHu} }">
                     <HBox alignItems="Center">
                         <Label text="{i18n>topHuLabel}:" class="sapUiSmallMarginEnd" />
-                        <Text text="{vm>/__sub/topHu}" />
+                        <Text text="{vm>/confirmed/topHu}" />
                     </HBox>
                     <HBox alignItems="Center">
                         <Label text="{i18n>packMatTopHuLabel}:" class="sapUiSmallMarginEnd" />
-                        <Text text="{vm>/__sub/packMatTopHu}" />
+                        <Text text="{vm>/confirmed/packMatTopHu}" />
                     </HBox>
                 </HBox>
             </VBox>

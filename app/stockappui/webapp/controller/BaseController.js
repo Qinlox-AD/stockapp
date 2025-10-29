@@ -119,6 +119,14 @@ sap.ui.define(
                     return this.onRouteMatchedExt(oEvt);
                 }
             }
+
+            // MAY BE FOR FUTURE
+            // setFocusOnField(fieldId) {
+            //     setTimeout(() => {
+            //         const field = this.getView().byId(fieldId);
+            //         field?.focus?.();
+            //     });
+            // },
         });
     }
 );

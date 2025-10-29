@@ -526,35 +526,45 @@ module.exports = cds.service.impl(async function () {
     if (!warehouse) return req.reject(400, "Warehouse is required.");
     if (!product) return true;
 
-    const whRules = await tx.run(SELECT.from(ValidationStock).where({ warehouse }));
-    if (!whRules.length) return true;
-    const prodRules = whRules.filter(r => r.product === product);
+    const warehouseRules = await tx.run(SELECT.from(ValidationStock).where({ warehouse }));
+    if (!warehouseRules.length) return true;
 
-    // Product not listed → not allowed
-    if (!prodRules.length) {
+    const productRules = warehouseRules.filter(rule => rule.product === product);
+    if (!productRules.length) {
       return req.reject(422, `Product '${product}' is not allowed in warehouse '${warehouse}'.`);
     }
 
-    // Determine if this product is batch-managed in this warehouse
-    const isBatchManaged = prodRules.some(r => r.batchManaged === true);
+    const isBatchManaged = productRules.some(rule => rule.batchManaged === true);
+    const batchValue = batch?.trim();
+    const hasBatch = !!batchValue;
 
-    // If batch-managed and only product was provided → require batch
-    if (isBatchManaged && !batch) {
-      return req.reject(422, `Batch is required for product '${product}' in warehouse '${warehouse}'.`);
+    // CASE 1: Product is NOT batch-managed → batch must NOT be provided
+    if (!isBatchManaged && hasBatch) {
+      return req.reject(422,
+        `Product '${product}' in warehouse '${warehouse}' is not batch-managed, so batch must not be provided.`
+      );
     }
 
-    // If batch-managed and batch was provided → require exact (product,batch) entry
-    if (isBatchManaged && batch) {
-      const exact = prodRules.some(r => (r.batch || "") === batch);
-      if (!exact) {
-        return req.reject(422, `Batch '${batch}' for product '${product}' is not allowed in warehouse '${warehouse}'.`);
-      }
+    // CASE 2: Product IS batch-managed → batch MUST be provided
+    if (isBatchManaged && !hasBatch) {
+      return req.reject(422,
+        `Batch is required for product '${product}' in warehouse '${warehouse}'.`
+      );
     }
 
-    // Non-batch-managed: product being listed is enough; batch (if provided) is ignored here
+    // CASE 3: Product is batch-managed AND batch is provided
+    // If there are batch-specific allowlist rules → batch must match one of them
+    const allowedBatches = productRules
+      .map(rule => rule.batch?.trim())
+      .filter(batchName => batchName); // keep only defined and non-empty values
+
+    if (allowedBatches.length > 0 && !allowedBatches.includes(batchValue)) {
+      return req.reject(422,
+        `Batch '${batchValue}' for product '${product}' is not allowed in warehouse '${warehouse}'.`
+      );
+    }
     return true;
   }
-
 
   async function validateDuplicateStockHU(req, tx, {
     warehouse,

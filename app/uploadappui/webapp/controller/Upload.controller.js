@@ -55,7 +55,6 @@ sap.ui.define([
         this.showBusyIndicator();
 
         const buf = await file.arrayBuffer();
-        // const bytes = new Uint8Array(buf);
         const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
         const resultMsg = await this.callAction("UploadValidationStock", { file: b64 });
 

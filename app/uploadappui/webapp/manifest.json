@@ -32,7 +32,7 @@
           "action": "display",
           "title": "{{appTitle}}",
           "subTitle": "{{appDescription}}",
-          "icon": "sap-icon://cart",
+          "icon": "sap-icon://upload-to-cloud",
           "signature": {
             "parameters": {},
             "additionalParameters": "allowed"

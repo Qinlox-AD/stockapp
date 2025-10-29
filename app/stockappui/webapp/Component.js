@@ -17,6 +17,7 @@ sap.ui.define([
                 entry: { hu: "", packMat: "", product: "", batch: "", quantity: null, uom: "" },
                 serials: [],
                 list: [],
+                confirmed: { topHu: "", packMatTopHu: "" },
                 __sub: { mode: "", topHu: "", packMatTopHu: "" }
             });
             this.setModel(vm, "vm");
