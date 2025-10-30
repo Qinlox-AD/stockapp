@@ -56,7 +56,7 @@ sap.ui.define([
         bin: encodeURIComponent(vm.getProperty("/bin") || "")
       });
     },
-    
+
     // === ConfirmTopHU backend action F4 ===
     onConfirmTopHu: async function () {
       const vm = this.getModelMain();
@@ -64,8 +64,6 @@ sap.ui.define([
       const packMatTopHU = (vm.getProperty("/__sub/packMatTopHu") || "").trim();
       if (!hu) { MessageBox.error(this.getI18nText("scanTopHU")); return; }
 
-      vm.setProperty("/confirmed/topHu", hu);
-      vm.setProperty("/confirmed/packMatTopHu", packMatTopHU);
 
       const input = {
         warehouse: vm.getProperty("/warehouse"),
@@ -76,8 +74,11 @@ sap.ui.define([
 
       try {
         this.showBusyIndicator();
-        const res = await this.callAction("ConfirmTopHU", { input }); // PhysicalStockResult
-        vm.setProperty("/__sub/topHu", res?.topHU || hu); // display on StockEntry
+        await this.callAction("ConfirmTopHU", { input });
+
+        vm.setProperty("/confirmed/topHu", hu);
+        vm.setProperty("/confirmed/packMatTopHu", packMatTopHU);
+
         MessageToast.show(this.getI18nText("msgSaved"));
         this.onNavBack();
       } catch (e) {
